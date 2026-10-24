@@ -7,7 +7,7 @@ SWEEP=${2:-configs/sweeps/kaggle_lie_resnet18.yaml}
 cd /kaggle/working
 [ -d byzmuon ] || git clone --depth 1 "$REPO" byzmuon
 cd byzmuon
-pip install -q -e . --no-deps
+pip install -q -e . --no-deps --ignore-requires-python
 python -c "import torch; print('torch', torch.__version__, 'cuda', torch.cuda.is_available(), torch.cuda.device_count(), 'gpus')"
 [ -f data/cifar10/train.npz ] || byzmuon fetch cifar10 --root data
 # results from a previous session, if its output was attached as an input dataset

@@ -5,7 +5,7 @@ description = "Byzantine attacks and defenses for Muon-style optimizers in feder
 authors = [
   { name = "mahdi.dlt", email = "140939231+mahdi13830510@users.noreply.github.com" },
 ]
-requires-python = ">=3.12,<3.13"
+requires-python = ">=3.12,<3.14"
 dependencies = [
   "matplotlib>=3.11.2",
   "numpy>=2.5.4",
