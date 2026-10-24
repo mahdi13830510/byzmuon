@@ -12,8 +12,15 @@ from byzmuon.registry import REGISTRY, register
 class SyntheticClassification(Dataset):
     """Gaussian clusters, one per class, with a fixed seed. For tests and smoke runs."""
 
-    def __init__(self, n: int = 2000, in_dim: int = 20, num_classes: int = 4, noise: float = 1.0,
-                 seed: int = 0, train: bool = True) -> None:
+    def __init__(
+        self,
+        n: int = 2000,
+        in_dim: int = 20,
+        num_classes: int = 4,
+        noise: float = 1.0,
+        seed: int = 0,
+        train: bool = True,
+    ) -> None:
         g = torch.Generator().manual_seed(seed + (0 if train else 1_000_003))
         means = torch.randn(num_classes, in_dim, generator=torch.Generator().manual_seed(seed)) * 2.0
         self.targets = torch.randint(0, num_classes, (n,), generator=g)
@@ -87,12 +94,13 @@ def load_dataset(name: str, train: bool, **kw) -> Dataset:
 
 
 def labels_of(ds: Dataset) -> np.ndarray:
-    t = getattr(ds, "targets")
+    t = ds.targets
     return t.numpy() if isinstance(t, Tensor) else np.asarray(t)
 
 
-def cycling_batches(ds: Dataset, indices: list[int], batch_size: int, seed: int,
-                    num_workers: int = 0) -> Callable[[], Iterator[tuple[Tensor, Tensor]]]:
+def cycling_batches(
+    ds: Dataset, indices: list[int], batch_size: int, seed: int, num_workers: int = 0
+) -> Callable[[], Iterator[tuple[Tensor, Tensor]]]:
     """Returns a function that yields batches forever, reshuffling each pass. One per client."""
     subset = Subset(ds, indices)
     state = {"epoch": 0}
@@ -101,8 +109,14 @@ def cycling_batches(ds: Dataset, indices: list[int], batch_size: int, seed: int,
         while True:
             g = torch.Generator().manual_seed(seed * 100_003 + state["epoch"])
             state["epoch"] += 1
-            loader = DataLoader(subset, batch_size=min(batch_size, len(subset)), shuffle=True,
-                                generator=g, num_workers=num_workers, drop_last=False)
+            loader = DataLoader(
+                subset,
+                batch_size=min(batch_size, len(subset)),
+                shuffle=True,
+                generator=g,
+                num_workers=num_workers,
+                drop_last=False,
+            )
             yield from loader
 
     return gen

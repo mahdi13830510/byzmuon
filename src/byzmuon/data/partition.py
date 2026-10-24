@@ -7,8 +7,9 @@ def iid_partition(n_samples: int, n_clients: int, seed: int = 0) -> list[list[in
     return [part.tolist() for part in np.array_split(idx, n_clients)]
 
 
-def dirichlet_partition(labels: np.ndarray, n_clients: int, alpha: float, seed: int = 0,
-                        min_size: int = 1, max_tries: int = 100) -> list[list[int]]:
+def dirichlet_partition(
+    labels: np.ndarray, n_clients: int, alpha: float, seed: int = 0, min_size: int = 1, max_tries: int = 100
+) -> list[list[int]]:
     """Per class, split its samples among clients with Dirichlet(alpha) proportions."""
     rng = np.random.default_rng(seed)
     classes = np.unique(labels)

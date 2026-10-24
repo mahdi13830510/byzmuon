@@ -93,3 +93,17 @@ def test_cli_run(tmp_path, capsys):
     assert "final_test_acc" in capsys.readouterr().out
     main(["results", str(tmp_path / "res")])
     assert "subgap" in capsys.readouterr().out
+
+
+def test_sweep_two_workers_on_cpu(tmp_path):
+    from byzmuon.runner.sweep import gpu_for_worker
+
+    assert [gpu_for_worker(i, 2) for i in range(4)] == ["0", "1", "0", "1"]
+    assert gpu_for_worker(0, 0) is None
+    base = tmp_path / "base.yaml"
+    yaml.safe_dump(to_dict(smoke_cfg(tmp_path, rounds=2)), base.open("w"))
+    sweep = tmp_path / "sweep.yaml"
+    yaml.safe_dump({"base": str(base), "grid": {"attack.name": ["none", "signflip", "lie"]}}, sweep.open("w"))
+    outs = run_sweep(sweep, workers=2)
+    assert len(outs) == 3 and all(o["final_test_acc"] is not None for o in outs)
+    assert len(load_results(tmp_path / "res")) == 3

@@ -13,10 +13,20 @@ import numpy as np
 
 HF = "https://huggingface.co/datasets/{repo}/resolve/main/{path}"
 SOURCES = {
-    "cifar10": {"repo": "uoft-cs/cifar10", "train": "plain_text/train-00000-of-00001.parquet",
-                "test": "plain_text/test-00000-of-00001.parquet", "img": "img", "label": "label"},
-    "cifar100": {"repo": "uoft-cs/cifar100", "train": "cifar100/train-00000-of-00001.parquet",
-                 "test": "cifar100/test-00000-of-00001.parquet", "img": "img", "label": "fine_label"},
+    "cifar10": {
+        "repo": "uoft-cs/cifar10",
+        "train": "plain_text/train-00000-of-00001.parquet",
+        "test": "plain_text/test-00000-of-00001.parquet",
+        "img": "img",
+        "label": "label",
+    },
+    "cifar100": {
+        "repo": "uoft-cs/cifar100",
+        "train": "cifar100/train-00000-of-00001.parquet",
+        "test": "cifar100/test-00000-of-00001.parquet",
+        "img": "img",
+        "label": "fine_label",
+    },
 }
 
 

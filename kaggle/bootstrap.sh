@@ -12,7 +12,8 @@ python -c "import torch; print('torch', torch.__version__, 'cuda', torch.cuda.is
 [ -f data/cifar10/train.npz ] || byzmuon fetch cifar10 --root data
 # results from a previous session, if its output was attached as an input dataset
 for prev in /kaggle/input/*/results; do [ -d "$prev" ] && cp -rn "$prev"/. results/ 2>/dev/null || true; done
-byzmuon sweep "$SWEEP"
+NGPU=$(python -c "import torch;print(max(1,torch.cuda.device_count()))")
+byzmuon sweep "$SWEEP" --workers "$NGPU"   # one run per GPU
 OUT="$(python -c "import yaml;print(yaml.safe_load(open('$SWEEP'))['config']['out_dir'])")"
 byzmuon results "$OUT"
 byzmuon plot "$OUT"          # figures + summary.md land in $OUT/figures
