@@ -1,0 +1,54 @@
+[project]
+name = "byzmuon"
+version = "0.1.0"
+description = "Byzantine attacks and defenses for Muon-style optimizers in federated learning"
+authors = [
+  { name = "mahdi.dlt", email = "140939231+mahdi13830510@users.noreply.github.com" },
+]
+requires-python = ">=3.12,<3.13"
+dependencies = [
+  "matplotlib>=3.11.2",
+  "numpy>=2.5.4",
+  "pandas>=3.0.6",
+  "pyarrow>=26.0.0",
+  "pytorch-triton-xpu==3.5.0",
+  "pyyaml>=6.0.3",
+  "torch==2.9.1",
+  "torchvision==0.24.1",
+  "tqdm>=4.70.1",
+]
+
+[project.scripts]
+byzmuon = "byzmuon.cli:main"
+
+[build-system]
+requires = ["uv_build>=0.13.0,<0.14.0"]
+build-backend = "uv_build"
+
+[tool.uv.sources]
+torch = { index = "pytorch-xpu" }
+torchvision = { index = "pytorch-xpu" }
+pytorch-triton-xpu = { index = "pytorch-xpu" }
+triton-xpu = { index = "pytorch-xpu" }
+
+[[tool.uv.index]]
+name = "pytorch-xpu"
+url = "https://download.pytorch.org/whl/xpu"
+explicit = true
+
+[tool.basedpyright]
+venvPath = "."
+venv = ".venv"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[dependency-groups]
+dev = ["pytest>=9.1.1", "pytest-xdist>=3.8.0", "ruff>=0.17.1"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]

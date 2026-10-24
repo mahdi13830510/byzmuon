@@ -1,0 +1,21 @@
+# Synthetic data, tiny MLP, CPU: a few seconds. Use to check the pipeline end to end.
+seed: 0
+device: cpu
+rounds: 5
+local_steps: 5
+batch_size: 32
+n_clients: 6
+num_byz: 1
+data: {name: synthetic, n: 1200, in_dim: 20, num_classes: 4}
+partition: {name: dirichlet, alpha: 1.0}
+model: {name: mlp, in_dim: 20, hidden: 32, num_classes: 4}
+client_opt: {name: sgd, lr: 0.05}
+server_opt: {name: muon, lr: 0.02, momentum: 0.95, orthogonalizer: {name: ns5}}
+aggregator: {base: {name: median}, pre: []}
+attack: {name: subgap, knowledge: omniscient, eps: 0.05}
+probes:
+  - {name: evaluate}
+  - {name: spectrum, every: 1}
+  - {name: amplification, every: 1}
+  - {name: console}
+out_dir: results/smoke

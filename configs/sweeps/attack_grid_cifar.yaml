@@ -1,0 +1,7 @@
+# Task 4 grid: every aggregator x every attack x optimizer family. Run on a CUDA machine.
+base: configs/cifar10_fedmuon_a.yaml
+grid:
+  server_opt.name: [muon, sgd, adam]
+  attack.name: [none, gaussian, signflip, lie, ipm, minmax, minsum, labelflip, subgap, spike]
+  aggregator.base.name: [mean, median, trimmed_mean, krum, multikrum, bulyan, geomed, centered_clip]
+seeds: [0, 1, 2]

@@ -1,0 +1,14 @@
+# A Little Is Enough (Baruch et al. 2019) vs FedMuon. ResNet-18, CIFAR-10, 20 clients (4 Byzantine), Dirichlet 0.5.
+# Muon server vs FedAvg server, with and without LIE, under four aggregators: 16 runs, ~15-20 min each on a T4.
+base: configs/cifar10_fedmuon_a.yaml
+config:
+  rounds: 150
+  probes:
+    - {name: evaluate, every: 5}
+    - {name: console, every: 10}
+  out_dir: results/lie_resnet18
+grid:
+  server_opt: [{name: muon, lr: 0.02, momentum: 0.95, adam_lr: 0.001}, {name: sgd, lr: 1.0}]
+  attack: [{name: none}, {name: lie, knowledge: omniscient}]
+  aggregator.base.name: [mean, median, trimmed_mean, krum]
+seeds: [0]

@@ -1,0 +1,18 @@
+seed: 0
+device: auto
+rounds: 200
+local_steps: 10
+batch_size: 64
+n_clients: 20
+num_byz: 4
+data: {name: cifar10, root: data}
+partition: {name: dirichlet, alpha: 0.5}
+model: {name: resnet18, num_classes: 10}
+client_opt: {name: sgd, lr: 0.05}
+server_opt: {name: sgd, lr: 1.0}
+aggregator: {base: {name: mean}, pre: []}
+attack: {name: none}
+probes:
+  - {name: evaluate, every: 5}
+  - {name: console, every: 5}
+out_dir: results/cifar10
