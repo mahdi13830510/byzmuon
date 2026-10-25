@@ -266,8 +266,8 @@ def fig_lie_shift(df: pd.DataFrame, out: Path) -> list[Path]:
     ax.annotate(
         f"formula z = {zf:.2f}\n(shifts the mean by {100 * f / n * zf:.0f}% of one std)",
         (zf, sim["mean"][int(np.searchsorted(zgrid, zf))] if "mean" in sim else 0),
-        xytext=(40, 70),
-        textcoords="offset points",
+        xytext=(1.25, 0.05),
+        textcoords="data",
         fontsize=7,
         color=INK2,
         arrowprops={"arrowstyle": "-", "color": MUTED, "linewidth": 0.8},
