@@ -32,6 +32,7 @@ def main(argv: list[str] | None = None) -> None:
     pl = sub.add_parser("plot", help="write figures and summary tables for a results directory")
     pl.add_argument("dir")
     pl.add_argument("--out", default=None, help="output directory (default: <dir>/figures)")
+    pl.add_argument("--lie", action="store_true", help="also write the LIE-only report figures")
     f = sub.add_parser("fetch", help="download a dataset from the fast Hugging Face mirror")
     f.add_argument("name", choices=["cifar10", "cifar100"])
     f.add_argument("--root", default="data")
@@ -53,6 +54,11 @@ def main(argv: list[str] | None = None) -> None:
 
         for p in make_figures(args.dir, args.out):
             print(p)
+        if args.lie:
+            from byzmuon.analysis import make_lie_figures
+
+            for p in make_lie_figures(args.dir, args.out):
+                print(p)
     elif args.cmd == "fetch":
         from byzmuon.data.fetch import fetch
 
