@@ -1,0 +1,24 @@
+# FedMuon only (mode A: client SGD, server Muon). ResNet-18, CIFAR-10, 20 clients (4 Byzantine), Dirichlet 0.5.
+# Attacks: none, LIE at the formula z (~0.16 for n=20,f=4) and at z=1,2, Min-Max, and our sub-gap tail attack
+# at three strengths. Three aggregators. 8 x 3 = 24 runs of 150 rounds; two at a time on a T4 x2.
+base: configs/cifar10_fedmuon_a.yaml
+config:
+  rounds: 150
+  probes:
+    - {name: evaluate, every: 5}
+    - {name: spectrum, every: 25}
+    - {name: amplification, every: 25}
+    - {name: console, every: 10}
+  out_dir: results/fedmuon_attacks
+grid:
+  attack:
+    - {name: none}
+    - {name: lie, knowledge: omniscient}
+    - {name: lie, knowledge: omniscient, z: 1.0}
+    - {name: lie, knowledge: omniscient, z: 2.0}
+    - {name: minmax, knowledge: omniscient}
+    - {name: subgap, knowledge: omniscient, mode: flip_tail, eps: 0.05}
+    - {name: subgap, knowledge: omniscient, mode: flip_tail, eps: 0.1}
+    - {name: subgap, knowledge: omniscient, mode: flip_tail, eps: 0.2}
+  aggregator.base.name: [mean, median, trimmed_mean]
+seeds: [0]

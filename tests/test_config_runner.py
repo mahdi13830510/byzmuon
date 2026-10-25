@@ -107,3 +107,27 @@ def test_sweep_two_workers_on_cpu(tmp_path):
     outs = run_sweep(sweep, workers=2)
     assert len(outs) == 3 and all(o["final_test_acc"] is not None for o in outs)
     assert len(load_results(tmp_path / "res")) == 3
+
+
+def test_sweep_inline_config_overrides_base(tmp_path):
+    base = tmp_path / "base.yaml"
+    yaml.safe_dump(to_dict(smoke_cfg(tmp_path, rounds=7)), base.open("w"))
+    sweep = tmp_path / "sweep.yaml"
+    yaml.safe_dump(
+        {
+            "base": str(base),
+            "config": {"rounds": 3, "attack": {"eps": 0.5}, "out_dir": str(tmp_path / "other")},
+            "grid": {"aggregator.base.name": ["mean"]},
+        },
+        sweep.open("w"),
+    )
+    (cfg,) = expand(sweep)
+    assert cfg.rounds == 3 and cfg.out_dir == str(tmp_path / "other")
+    assert cfg.attack["name"] == "subgap" and cfg.attack["eps"] == 0.5  # deep merge keeps sibling keys
+
+
+def test_kaggle_sweep_expands():
+    cfgs = expand("configs/sweeps/kaggle_fedmuon_attacks.yaml")
+    assert len(cfgs) == 24 and len({c.hash() for c in cfgs}) == 24
+    assert all(c.server_opt["name"] == "muon" and c.rounds == 150 for c in cfgs)
+    assert {c.attack["name"] for c in cfgs} == {"none", "lie", "minmax", "subgap"}

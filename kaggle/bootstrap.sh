@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Kaggle entry point. In a notebook cell:
-#   !git clone --depth 1 https://github.com/mahdi13830510/byzmuon.git /kaggle/working/byzmuon 2>/dev/null; bash /kaggle/working/byzmuon/kaggle/bootstrap.sh configs/sweeps/kaggle_lie_resnet18.yaml
+#   !git clone --depth 1 https://github.com/mahdi13830510/byzmuon.git /kaggle/working/byzmuon 2>/dev/null; bash /kaggle/working/byzmuon/kaggle/bootstrap.sh configs/sweeps/kaggle_fedmuon_attacks.yaml
 # Run the notebook with "Save Version -> Save & Run All (Commit)" so it runs in the background and the
 # output is kept even if you close the browser. Interactive sessions are deleted after ~20 min idle.
 # Results are written directly to /kaggle/working/results (symlinked), so every finished run is already
@@ -8,7 +8,7 @@
 # Optional: set a Kaggle secret GITHUB_TOKEN (repo scope) and export it in the cell to also push results
 # to the `results` branch of the repo after each sweep.
 set -euo pipefail
-SWEEP=${1:-configs/sweeps/kaggle_lie_resnet18.yaml}
+SWEEP=${1:-configs/sweeps/kaggle_fedmuon_attacks.yaml}
 REPO=${REPO:-https://github.com/mahdi13830510/byzmuon.git}
 cd /kaggle/working
 [ -d byzmuon ] || git clone --depth 1 "$REPO" byzmuon

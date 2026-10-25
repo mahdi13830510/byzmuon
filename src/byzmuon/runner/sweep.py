@@ -22,11 +22,25 @@ import yaml
 from byzmuon.config import RunConfig, load_config
 
 
+def _deep_merge(dst: dict, src: dict) -> dict:
+    for k, v in src.items():
+        if isinstance(v, dict) and isinstance(dst.get(k), dict):
+            _deep_merge(dst[k], v)
+        else:
+            dst[k] = v
+    return dst
+
+
 def expand(sweep_path: str | Path) -> list[RunConfig]:
+    """Precedence, lowest to highest: `base` file < inline `config` < grid values < seed."""
     with open(sweep_path) as f:
         sw = yaml.safe_load(f)
-    base_path = sw.get("base")
-    base_dict = sw.get("config") or {}
+    base_dict: dict = {}
+    if sw.get("base"):
+        with open(sw["base"]) as f:
+            base_dict = yaml.safe_load(f) or {}
+    _deep_merge(base_dict, sw.get("config") or {})
+    base_path = None
     grid: dict = sw.get("grid") or {}
     seeds = sw.get("seeds") or [None]
     keys = list(grid)
