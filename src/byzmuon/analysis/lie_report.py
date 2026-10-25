@@ -1,11 +1,12 @@
-"""Figures for the 'A Little Is Enough' (LIE) attack alone: how damage scales with the attack strength z, when it
-accrues, and what the attack does to the aggregate that the server orthogonalizes.
+"""Figures for the 'A Little Is Enough' (LIE) attack alone. Each figure makes one point and says it in its title.
 
-  lie_curves.*      test accuracy and test loss vs round, one panel per aggregator, one line per z (plus no attack)
-  lie_dose.*        final accuracy vs z; accuracy gap vs round; rounds to reach a target accuracy vs z
-  lie_aggregate.*   what the server sees: aggregate norm (relative to no attack) and effective rank vs round
-  lie_shift.*       simulated per-coordinate shift of each aggregator as a function of z (why the formula z is tiny
-                    and why the median saturates)
+lie_final.*       final accuracy per aggregator, one bar per attack strength z, loss in pp written on the bar
+lie_timeline.*    accuracy lost to LIE vs round, one panel per aggregator (when the damage appears)
+lie_mechanism.*   what the Muon server sees: size of the aggregate (which Muon normalizes away) and its effective
+                  rank (which it does not), per aggregator and z
+lie_geometry.*    one coordinate: where LIE places the f attackers relative to the n−f honest values, for each z
+lie_shift.*       simulated per-coordinate shift of each aggregator as a function of z
+lie_curves.*      test accuracy vs round with direct labels (supporting figure)
 """
 
 import math
@@ -15,13 +16,15 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-from byzmuon.analysis.plots import AXIS, CAT, INK, INK2, MUTED, _label, _save, load_curves
+from byzmuon.analysis.plots import AXIS, CAT, GRID, INK, INK2, MUTED, _label, _save, load_curves
 from byzmuon.runner.results import load_results
 
-NONE_STYLE = {"color": INK2, "linestyle": "--", "linewidth": 1.6}
+NONE_COLOR = "#9a9890"
 Z_RAMP = ["#86b6ef", "#3987e5", "#1c5cab", "#0d366b"]  # light -> dark: weak -> strong attack (sequential, one hue)
 AGG_ORDER = ["mean", "median", "trimmed_mean", "krum", "bulyan", "geomed", "centered_clip"]
 AGG_LABEL = {"trimmed_mean": "trimmed mean", "centered_clip": "centered clip", "geomed": "geometric median"}
+THREE = ["mean", "median", "trimmed_mean"]
+RC = {"font.size": 11, "axes.titlesize": 11.5, "axes.labelsize": 11, "legend.fontsize": 10, "figure.titlesize": 13}
 
 
 def lie_formula_z(n: int, f: int) -> float:
@@ -31,6 +34,9 @@ def lie_formula_z(n: int, f: int) -> float:
     s = math.floor(n / 2 + 1) - f
     p = max(1e-6, min(1 - 1e-6, (n - f - s) / (n - f)))
     return NormalDist().inv_cdf(p)
+
+
+# ----------------------------------------------------------------------------------------------- data helpers
 
 
 def _lie_runs(df: pd.DataFrame) -> pd.DataFrame:
@@ -56,17 +62,19 @@ def _all_zs(df: pd.DataFrame) -> list[float]:
     return [0.0] + _attack_zs(df) if (~df["attacked"]).any() else _attack_zs(df)
 
 
-def _z_label(z: float) -> str:
-    return "no attack" if z == 0 else f"LIE z={z:g}"
+def _z_label(z: float, formula: float | None = None) -> str:
+    if z == 0:
+        return "no attack"
+    if formula is not None and abs(z - formula) < 1e-3:
+        return f"LIE z={z:g} (paper's formula)"
+    return f"LIE z={z:g}"
 
 
 def _z_colors(attack_zs: list[float]) -> dict[float, str]:
     ramp = Z_RAMP if len(attack_zs) <= len(Z_RAMP) else Z_RAMP * (len(attack_zs) // len(Z_RAMP) + 1)
-    return {z: ramp[len(ramp) - len(attack_zs) + i] for i, z in enumerate(attack_zs)}  # strongest = darkest
-
-
-def _z_style(z: float, colors: dict[float, str]) -> dict:
-    return dict(NONE_STYLE) if z == 0 else {"color": colors[z], "linewidth": 1.8}
+    colors = {z: ramp[len(ramp) - len(attack_zs) + i] for i, z in enumerate(attack_zs)}  # strongest = darkest
+    colors[0.0] = NONE_COLOR
+    return colors
 
 
 def _aggs(df: pd.DataFrame) -> list[str]:
@@ -90,139 +98,264 @@ def _sel(curves: pd.DataFrame, agg: str, z: float) -> pd.DataFrame:
     return curves[(curves["agg"] == agg) & (curves["z"] == z)]
 
 
-def _z_axis(ax, zs: list[float]) -> list[int]:
-    """Equally spaced categorical positions for the z values (0.157 and 1 would collide on a linear axis)."""
-    pos = list(range(len(zs)))
-    ax.set_xticks(pos, ["none" if z == 0 else f"{z:g}" for z in zs])
-    ax.set_xlabel("attack strength z")
-    return pos
-
-
-def fig_lie_curves(curves: pd.DataFrame, out: Path) -> list[Path]:
-    aggs = _aggs(curves)
-    zs = _all_zs(curves)
-    colors = _z_colors(_attack_zs(curves))
-    metrics = [("test_acc", "test accuracy")] + ([("test_loss", "test loss")] if "test_loss" in curves.columns else [])
-    fig, axes = plt.subplots(
-        len(metrics),
-        len(aggs),
-        figsize=(3.4 * len(aggs), 2.9 * len(metrics)),
-        sharex=True,
-        sharey="row",
-        squeeze=False,
-    )
-    for j, agg in enumerate(aggs):
-        for i, (col, name) in enumerate(metrics):
-            ax = axes[i][j]
-            for z in zs:
-                c = _sel(curves, agg, z)
-                if c.empty:
-                    continue
-                m = _mean_curve(c, col)
-                ax.plot(m.index, m.values, label=_z_label(z), **_z_style(z, colors))
-            if i == 0:
-                ax.set_title(f"aggregator: {_agg_name(agg)}", color=INK)
-                ax.set_ylim(0, 1)
-            if i == len(metrics) - 1:
-                ax.set_xlabel("round")
-            if j == 0:
-                ax.set_ylabel(name)
-    handles, labels = axes[0][0].get_legend_handles_labels()
-    fig.legend(handles, labels, loc="upper center", ncol=len(labels), bbox_to_anchor=(0.5, 0.0), frameon=False)
-    fig.subplots_adjust(bottom=0.14, hspace=0.12, wspace=0.08)
-    fig.suptitle("FedMuon under the LIE attack: training curves for each attack strength z", color=INK, y=0.995)
-    return _save(fig, out, "lie_curves")
-
-
-def _rounds_to(c: pd.DataFrame, target: float) -> float:
-    """First round at which the mean accuracy curve reaches `target`, linearly interpolated between evaluations."""
-    m = _mean_curve(c, "test_acc")
-    r, a = m.index.to_numpy(dtype=float), m.to_numpy()
-    for i in range(1, len(a)):
-        if a[i] >= target > a[i - 1]:
-            return r[i - 1] + (target - a[i - 1]) / (a[i] - a[i - 1]) * (r[i] - r[i - 1])
-    return 0.0 if len(a) and a[0] >= target else np.nan
-
-
 def _smooth(s: pd.Series, k: int = 3) -> pd.Series:
     return s.rolling(k, center=True, min_periods=1).mean()
 
 
-def fig_lie_dose(df: pd.DataFrame, curves: pd.DataFrame, out: Path, target: float = 0.7) -> list[Path]:
-    aggs = _aggs(df)
-    zs = _all_zs(df)
-    attack_zs = _attack_zs(df)
-    fig, axes = plt.subplots(1, 3, figsize=(12, 3.6), layout="constrained")
+def _nf(df: pd.DataFrame) -> tuple[int, int]:
+    return int(df["cfg.n_clients"].iloc[0]), int(df["cfg.num_byz"].iloc[0])
 
-    # (a) final accuracy vs z, labelled with the drop in percentage points
-    ax = axes[0]
-    pos = _z_axis(ax, zs)
-    for agg in aggs:
-        g = df[df["agg"] == agg].groupby("z")["final_test_acc"].agg(["mean", "std"]).reindex(zs)
-        ax.errorbar(
-            pos,
-            g["mean"],
-            yerr=g["std"].fillna(0) if g["std"].notna().any() else None,
-            marker="o",
-            markersize=5,
-            color=_agg_color(agg, aggs),
-            label=_agg_name(agg),
-            capsize=2,
+
+def _rounds(df: pd.DataFrame) -> int:
+    return int(df["cfg.rounds"].iloc[0]) if "cfg.rounds" in df.columns else 0
+
+
+def _trimmed(vals: np.ndarray, f: int) -> float:
+    k = min(f, (len(vals) - 1) // 2)
+    return float(np.sort(vals)[k : len(vals) - k].mean())
+
+
+# ----------------------------------------------------------------------------------------------- figures
+
+
+def fig_lie_final(df: pd.DataFrame, out: Path) -> list[Path]:
+    aggs, zs = _aggs(df), _all_zs(df)
+    colors = _z_colors(_attack_zs(df))
+    zf = lie_formula_z(*_nf(df))
+    g = df.groupby(["agg", "z"])["final_test_acc"].agg(["mean", "std", "count"])
+    with plt.rc_context(RC):
+        fig, ax = plt.subplots(figsize=(2.4 * len(aggs) + 3, 4.6), layout="constrained")
+        width = 0.8 / len(zs)
+        x = np.arange(len(aggs))
+        for i, z in enumerate(zs):
+            pos = x + (i - (len(zs) - 1) / 2) * width
+            vals = [g["mean"].get((a, z), np.nan) for a in aggs]
+            errs = [g["std"].get((a, z), np.nan) for a in aggs]
+            ax.bar(
+                pos,
+                vals,
+                width * 0.92,
+                color=colors[z],
+                label=_z_label(z, zf),
+                yerr=errs if any(e > 0 for e in errs if not np.isnan(e)) else None,
+                ecolor=INK2,
+                capsize=2,
+                linewidth=0,
+            )
+            for p, a, v in zip(pos, aggs, vals, strict=True):
+                if np.isnan(v):
+                    continue
+                ax.text(p, v + 0.004, f"{100 * v:.1f}", ha="center", va="bottom", fontsize=8.5, color=INK2)
+                base = g["mean"].get((a, 0.0), np.nan)
+                if z != 0 and not np.isnan(base):
+                    loss = 100 * (base - v)
+                    ax.text(
+                        p,
+                        v - 0.012,
+                        f"{loss:+.1f}" if abs(loss) >= 2 else "±0",
+                        ha="center",
+                        va="top",
+                        fontsize=8.5,
+                        fontweight="bold" if abs(loss) >= 2 else "normal",
+                        color="white",
+                    )
+        lo = max(0.0, g["mean"].min() - 0.04)
+        ax.set_ylim(lo, min(1.0, g["mean"].max() + 0.075))
+        ax.set_xticks(x, [_agg_name(a) for a in aggs])
+        ax.set_xlabel("aggregator at the server")
+        ax.set_ylabel(f"test accuracy after {_rounds(df)} rounds")
+        ax.legend(frameon=False, loc="upper center", ncol=len(zs))
+        ax.set_title(
+            "LIE at the paper's strength does nothing to FedMuon. A 6-13x stronger LIE costs median ~8 pp, "
+            "mean and trimmed mean ~3 pp.\nWhite numbers: change vs. no attack in percentage points "
+            "(single seed; differences under 2 pp are noise).",
+            color=INK,
+            fontsize=10.5,
+            loc="left",
         )
-        base = g["mean"].get(0.0, np.nan)
-        for p, (z, v) in zip(pos, g["mean"].items(), strict=True):
-            if z != 0 and not (np.isnan(base) or np.isnan(v)):
-                ax.annotate(
-                    f"{100 * (base - v):+.1f}",
-                    (p, v),
-                    textcoords="offset points",
-                    xytext=(0, -11 - 8 * aggs.index(agg)),
-                    ha="center",
-                    fontsize=7,
+    return _save(fig, out, "lie_final")
+
+
+def fig_lie_timeline(df: pd.DataFrame, curves: pd.DataFrame, out: Path, threshold_pp: float = 2.0) -> list[Path]:
+    aggs, zs = _aggs(df), _attack_zs(df)
+    colors = _z_colors(zs)
+    zf = lie_formula_z(*_nf(df))
+    with plt.rc_context(RC):
+        fig, axes = plt.subplots(1, len(aggs), figsize=(3.9 * len(aggs), 4.0), sharey=True, squeeze=False)
+        for ax, agg in zip(axes[0], aggs, strict=True):
+            base = _mean_curve(_sel(curves, agg, 0.0), "test_acc")
+            onset_round = None
+            ends = []
+            for z in zs:
+                c = _sel(curves, agg, z)
+                if c.empty or base.empty:
+                    continue
+                gap = 100 * _smooth((base - _mean_curve(c, "test_acc")).dropna())
+                ax.plot(gap.index, gap.values, color=colors[z], linewidth=2.0, label=_z_label(z, zf))
+                ax.fill_between(gap.index, 0, gap.values, where=gap.values > 0, color=colors[z], alpha=0.10, lw=0)
+                ends.append((gap.values[-1], gap.index[-1], colors[z]))
+                if z == max(zs):
+                    late = gap[(gap >= threshold_pp) & (gap.index > 40)]
+                    onset_round = late.index[0] if len(late) else None
+            ends.sort()
+            last_y = -1e9
+            for v, r, col in ends:  # direct labels, nudged apart
+                y = max(v, last_y + 0.9)
+                ax.text(r + 2, y, f"{v:+.1f}", color=col, fontsize=9, va="center")
+                last_y = y
+            ax.axhline(0, color=AXIS, linewidth=0.9)
+            if onset_round is not None:
+                ax.axvline(onset_round, color=MUTED, linestyle=":", linewidth=1)
+                ax.text(
+                    onset_round - 2,
+                    ax.get_ylim()[1],
+                    f"> {threshold_pp:.0f} pp from round {onset_round:.0f}",
+                    rotation=90,
+                    va="top",
+                    ha="right",
+                    fontsize=8.5,
                     color=INK2,
                 )
-    ax.set_ylabel("final test accuracy")
-    ax.set_title("final accuracy (labels: loss in pp)", color=INK)
-    ax.legend(frameon=False, loc="lower left")
+            ax.set_title(f"aggregator: {_agg_name(agg)}", color=INK)
+            ax.set_xlabel("round")
+            if len(base):
+                ax.set_xlim(0, base.index.max() * 1.12)
+        axes[0][0].set_ylabel("accuracy lost to LIE (pp)\nabove 0 = the attack is hurting")
+        handles, labels = axes[0][0].get_legend_handles_labels()
+        fig.legend(handles, labels, loc="upper center", ncol=len(labels), bbox_to_anchor=(0.5, 0.02), frameon=False)
+        fig.subplots_adjust(bottom=0.24, wspace=0.08, top=0.80, left=0.08, right=0.98)
+        fig.suptitle(
+            "LIE does not slow FedMuon down: the loss appears late in training, "
+            "once the honest updates have become small",
+            color=INK,
+            x=0.01,
+            ha="left",
+        )
+    return _save(fig, out, "lie_timeline")
 
-    # (b) accuracy lost vs round, strongest z solid, weaker z dashed/dotted (3-point moving average)
-    ax = axes[1]
-    styles = ["-", "--", ":", "-."]
-    for agg in aggs:
-        base = _mean_curve(_sel(curves, agg, 0.0), "test_acc")
-        for k, z in enumerate(sorted(attack_zs, reverse=True)):
-            c = _sel(curves, agg, z)
-            if c.empty or base.empty:
-                continue
-            gap = _smooth((base - _mean_curve(c, "test_acc")).dropna())
-            ax.plot(
-                gap.index,
-                100 * gap.values,
-                styles[k % len(styles)],
-                color=_agg_color(agg, aggs),
-                linewidth=1.6,
-                label=f"{_agg_name(agg)}, z={z:g}",
-            )
-    ax.axhline(0, color=AXIS, linewidth=0.8)
-    ax.set_xlabel("round")
-    ax.set_ylabel("accuracy lost to LIE (pp)")
-    ax.set_title("when the damage accrues", color=INK)
-    ax.legend(frameon=False, fontsize=7, ncol=len(aggs), loc="upper center", bbox_to_anchor=(0.5, -0.22))
 
-    # (c) rounds to reach the target accuracy vs z
-    ax = axes[2]
-    pos = _z_axis(ax, zs)
-    never = []
-    for agg in aggs:
-        rt = [_rounds_to(_sel(curves, agg, z), target) for z in zs]
-        ax.plot(pos, rt, marker="o", markersize=5, color=_agg_color(agg, aggs), label=_agg_name(agg))
-        never += [(p, agg) for p, r in zip(pos, rt, strict=True) if np.isnan(r)]
-    for p, agg in never:
-        ax.annotate(f"{_agg_name(agg)}: never", (p, ax.get_ylim()[1]), ha="center", fontsize=7, color=MUTED)
-    ax.set_ylabel(f"rounds to reach {100 * target:.0f}% accuracy")
-    ax.set_title("slowdown", color=INK)
-    fig.suptitle("Dose-response of FedMuon to the LIE attack", color=INK)
-    return _save(fig, out, "lie_dose")
+def fig_lie_mechanism(df: pd.DataFrame, curves: pd.DataFrame, out: Path, window: int = 25) -> list[Path]:
+    aggs, zs = _aggs(df), _all_zs(df)
+    colors = _z_colors(_attack_zs(df))
+    zf = lie_formula_z(*_nf(df))
+    erank_cols = [c for c in curves.columns if c.startswith("spec/") and c.endswith("/erank")]
+    have_fro = "agg_fro" in curves.columns
+    if not (have_fro or erank_cols):
+        return []
+    if erank_cols:
+        curves = curves.assign(erank=curves[erank_cols].mean(axis=1))
+    last_round = curves["round"].max()
+
+    def late(agg: str, z: float, col: str) -> float:
+        c = _sel(curves, agg, z).dropna(subset=[col])
+        c = c[c["round"] >= last_round - window]
+        return float(c[col].mean()) if len(c) else np.nan
+
+    panels = (["fro"] if have_fro else []) + (["erank"] if erank_cols else [])
+    with plt.rc_context(RC):
+        fig, axes = plt.subplots(1, len(panels), figsize=(5.4 * len(panels), 4.4), layout="constrained", squeeze=False)
+        width = 0.8 / len(zs)
+        x = np.arange(len(aggs))
+        for ax, panel in zip(axes[0], panels, strict=True):
+            for i, z in enumerate(zs):
+                pos = x + (i - (len(zs) - 1) / 2) * width
+                if panel == "fro":
+                    vals = [late(a, z, "agg_fro") / late(a, 0.0, "agg_fro") for a in aggs]
+                else:
+                    vals = [late(a, z, "erank") for a in aggs]
+                ax.bar(pos, vals, width * 0.92, color=colors[z], label=_z_label(z, zf), linewidth=0)
+                for p, v in zip(pos, vals, strict=True):
+                    if not np.isnan(v):
+                        txt = f"{v:.1f}" if panel == "erank" else f"{v:.2f}x"
+                        ax.text(p, v, txt, ha="center", va="bottom", fontsize=8.5, color=INK2)
+            ax.set_xticks(x, [_agg_name(a) for a in aggs])
+            if panel == "fro":
+                ax.axhline(1, color=AXIS, linewidth=0.9)
+                ax.set_ylabel("size of the aggregate, relative to no attack")
+                ax.set_title(
+                    "LIE inflates the aggregate up to 3x ...\n"
+                    "... but Muon rescales every update, so size is irrelevant",
+                    color=INK,
+                    loc="left",
+                )
+            else:
+                ax.set_ylabel("effective rank of the aggregate")
+                ax.set_title(
+                    "... and lowers its effective rank:\nfewer directions carry the step, and Muon cannot undo this",
+                    color=INK,
+                    loc="left",
+                )
+        axes[0][0].legend(frameon=False, loc="upper left", fontsize=9)
+        fig.suptitle(
+            f"What the Muon server receives under LIE (average over the last {window} rounds)",
+            color=INK,
+            x=0.01,
+            ha="left",
+        )
+    return _save(fig, out, "lie_mechanism")
+
+
+def fig_lie_geometry(df: pd.DataFrame, out: Path, seed: int = 3) -> list[Path]:
+    """One coordinate of the update: n−f honest values drawn from N(0,1), f attackers at mean − z·std."""
+    n, f = _nf(df)
+    zs = _attack_zs(df)
+    colors = _z_colors(zs)
+    zf = lie_formula_z(n, f)
+    rng = np.random.default_rng(seed)
+    honest = np.sort(rng.standard_normal(n - f))
+    mu, sd = honest.mean(), honest.std()
+    rows = [0.0] + zs
+    with plt.rc_context(RC):
+        fig, ax = plt.subplots(figsize=(10.5, 2.6 + 0.75 * len(rows)), layout="constrained")
+        xs = np.linspace(-3.6, 3.6, 300)
+        pdf = np.exp(-0.5 * xs**2) / np.sqrt(2 * np.pi) * 1.5
+        for i, z in enumerate(rows):
+            y = len(rows) - 1 - i
+            ax.fill_between(xs, y, y + pdf, color=GRID, lw=0)
+            ax.scatter(honest, np.full_like(honest, y + 0.07), s=26, color=INK2, zorder=3)
+            if z:
+                bad = np.full(f, mu - z * sd)
+                ax.scatter(
+                    bad + np.linspace(-0.05, 0.05, f),
+                    np.full(f, y + 0.07),
+                    s=52,
+                    color=colors[z],
+                    marker="v",
+                    zorder=4,
+                    edgecolor="white",
+                    linewidth=0.5,
+                )
+                vals = np.concatenate([honest, bad])
+            else:
+                vals = honest
+            stats = {"mean": vals.mean(), "median": float(np.median(vals)), "trimmed_mean": _trimmed(vals, f)}
+            for agg, v in stats.items():
+                ax.plot([v, v], [y, y + 0.46], color=_agg_color(agg, THREE), linewidth=2.4, zorder=5)
+            ax.text(-3.55, y + 0.52, _z_label(z, zf), fontsize=10, color=INK, va="center")
+        for agg, v in {"mean": mu, "median": float(np.median(honest)), "trimmed_mean": _trimmed(honest, f)}.items():
+            ax.axvline(v, color=_agg_color(agg, THREE), linewidth=0.8, linestyle=":", zorder=1)
+        ax.set_ylim(-0.1, len(rows) + 0.25)
+        ax.set_yticks([])
+        ax.set_xlim(-3.7, 3.7)
+        ax.set_xlabel("value of one update coordinate, in honest standard deviations (0 = honest mean)")
+        ax.grid(False)
+        handles = [
+            plt.Line2D([], [], marker="o", color=INK2, linestyle="", markersize=6, label=f"{n - f} honest clients"),
+            plt.Line2D([], [], marker="v", color=Z_RAMP[-1], linestyle="", markersize=7, label=f"{f} LIE attackers"),
+        ] + [
+            plt.Line2D([], [], color=_agg_color(a, THREE), linewidth=2.4, label=f"{_agg_name(a)} of all {n}")
+            for a in THREE
+        ]
+        ax.legend(handles=handles, frameon=False, loc="upper right", fontsize=9, ncol=5, bbox_to_anchor=(1.0, 1.03))
+        ax.set_title(
+            f"Where LIE puts the attackers in one coordinate. At the paper's z={zf:.2f} they sit inside the honest "
+            "cloud and move nothing;\nat z ≥ 1 the median jumps to the next honest value and then saturates. "
+            "Dotted lines: the honest-only aggregates.",
+            color=INK,
+            loc="left",
+            fontsize=10.5,
+        )
+    return _save(fig, out, "lie_geometry")
 
 
 def simulate_shift(n: int, f: int, zs, aggs, trials: int = 20000, seed: int = 0) -> dict[str, list[float]]:
@@ -250,80 +383,99 @@ def simulate_shift(n: int, f: int, zs, aggs, trials: int = 20000, seed: int = 0)
 
 
 def fig_lie_shift(df: pd.DataFrame, out: Path) -> list[Path]:
-    aggs = [a for a in _aggs(df) if a in ("mean", "median", "trimmed_mean")]
+    all_aggs = _aggs(df)
+    aggs = [a for a in all_aggs if a in THREE]
     attack_zs = _attack_zs(df)
     colors = _z_colors(attack_zs)
-    n, f = int(df["cfg.n_clients"].iloc[0]), int(df["cfg.num_byz"].iloc[0])
-    fig, ax = plt.subplots(figsize=(5.2, 3.4), layout="constrained")
-    zgrid = np.linspace(0, max(2.5, max(attack_zs) * 1.1), 80)
-    sim = simulate_shift(n, f, zgrid, aggs)
-    for agg in aggs:
-        ax.plot(zgrid, sim[agg], color=_agg_color(agg, _aggs(df)), linewidth=1.8, label=_agg_name(agg))
-    for z in attack_zs:
-        ax.axvline(z, color=colors[z], linewidth=0.9, linestyle=":")
-        ax.annotate(f"z={z:g}", (z, 0), xytext=(3, 2), textcoords="offset points", fontsize=7, color=colors[z])
+    n, f = _nf(df)
     zf = lie_formula_z(n, f)
-    ax.annotate(
-        f"formula z = {zf:.2f}\n(shifts the mean by {100 * f / n * zf:.0f}% of one std)",
-        (zf, sim["mean"][int(np.searchsorted(zgrid, zf))] if "mean" in sim else 0),
-        xytext=(1.25, 0.05),
-        textcoords="data",
-        fontsize=7,
-        color=INK2,
-        arrowprops={"arrowstyle": "-", "color": MUTED, "linewidth": 0.8},
-    )
-    ax.set_xlabel("attack strength z")
-    ax.set_ylabel("shift of the aggregate\n(per coordinate, in honest-std units)")
-    ax.set_title(f"How far LIE moves each aggregator, n={n}, f={f} (simulated)", color=INK)
-    ax.legend(frameon=False, loc="upper left")
+    with plt.rc_context(RC):
+        fig, ax = plt.subplots(figsize=(7.6, 4.4), layout="constrained")
+        zgrid = np.linspace(0, max(2.5, max(attack_zs) * 1.1), 80)
+        sim = simulate_shift(n, f, zgrid, aggs)
+        for agg in aggs:
+            ax.plot(zgrid, sim[agg], color=_agg_color(agg, all_aggs), linewidth=2.2)
+            ax.text(
+                zgrid[-1] + 0.04,
+                sim[agg][-1],
+                _agg_name(agg),
+                color=_agg_color(agg, all_aggs),
+                va="center",
+                fontsize=10,
+            )
+        top = float(np.nanmax([np.nanmax(v) for v in sim.values()]))
+        top = top if np.isfinite(top) and top > 0 else 1.0
+        for z in attack_zs:
+            ax.axvline(z, color=colors[z], linewidth=1, linestyle=":")
+            tag = f"z={z:g}" + (" (paper's formula)" if abs(z - zf) < 1e-3 else "")
+            ax.text(z + 0.02, top * 1.02, tag, color=colors[z], fontsize=9, va="top", rotation=90)
+        i_f = int(np.searchsorted(zgrid, zf))
+        med_txt = f", the median by {100 * sim['median'][i_f]:.0f}%" if "median" in sim else ""
+        ax.annotate(
+            f"paper's z = {zf:.2f}: the mean moves by {100 * f / n * zf:.0f}% of one std{med_txt}",
+            (zf, sim["mean"][i_f] if "mean" in sim else 0),
+            xytext=(1.15, 0.05),
+            textcoords="data",
+            fontsize=9,
+            color=INK2,
+            arrowprops={"arrowstyle": "-", "color": MUTED, "linewidth": 0.8},
+        )
+        ax.set_xlim(0, zgrid[-1] + 0.6)
+        ax.set_ylim(0, top * 1.05)
+        ax.set_xlabel("LIE strength z  (attackers send: honest mean − z · honest std)")
+        ax.set_ylabel("shift of the aggregate per coordinate\n(in honest standard deviations)")
+        ax.set_title(
+            f"How far LIE can move each aggregator with {f} of {n} clients:\n"
+            "the median saturates at z ≈ 0.5, the mean grows without bound",
+            color=INK,
+            loc="left",
+            fontsize=11,
+        )
     return _save(fig, out, "lie_shift")
 
 
-def fig_lie_aggregate(df: pd.DataFrame, curves: pd.DataFrame, out: Path) -> list[Path]:
-    aggs = _aggs(df)
-    zs = _all_zs(df)
+def fig_lie_curves(df: pd.DataFrame, curves: pd.DataFrame, out: Path) -> list[Path]:
+    aggs, zs = _aggs(df), _all_zs(df)
     colors = _z_colors(_attack_zs(df))
-    erank_cols = [c for c in curves.columns if c.startswith("spec/") and c.endswith("/erank")]
-    rows = (["fro"] if "agg_fro" in curves.columns else []) + (["erank"] if erank_cols else [])
-    if not rows:
-        return []
-    if erank_cols:
-        curves = curves.assign(erank=curves[erank_cols].mean(axis=1))
-    fig, axes = plt.subplots(
-        len(rows), len(aggs), figsize=(3.6 * len(aggs), 2.9 * len(rows)), sharex=True, sharey="row", squeeze=False
-    )
-    for j, agg in enumerate(aggs):
-        for i, row in enumerate(rows):
-            ax = axes[i][j]
-            if row == "fro":
-                base = _mean_curve(_sel(curves, agg, 0.0), "agg_fro")
-                for z in zs:
-                    if z == 0:
-                        continue
-                    ratio = _smooth((_mean_curve(_sel(curves, agg, z), "agg_fro") / base).dropna(), 5)
-                    ax.plot(ratio.index, ratio.values, label=_z_label(z), **_z_style(z, colors))
-                ax.axhline(1, **NONE_STYLE)
-                if j == 0:
-                    ax.set_ylabel("‖aggregate‖ relative to no attack")
-                if i == 0:
-                    ax.set_title(f"aggregator: {_agg_name(agg)}", color=INK)
-            else:
-                for z in zs:
-                    m = _mean_curve(_sel(curves, agg, z), "erank")
-                    ax.plot(m.index, m.values, label=_z_label(z), **_z_style(z, colors))
-                if j == 0:
-                    ax.set_ylabel("effective rank of the aggregate")
-            if i == len(rows) - 1:
-                ax.set_xlabel("round")
-    handles, labels = axes[-1][0].get_legend_handles_labels()
-    fig.legend(handles, labels, loc="upper center", ncol=len(labels), bbox_to_anchor=(0.5, 0.0), frameon=False)
-    fig.subplots_adjust(bottom=0.14, hspace=0.12, wspace=0.08)
-    fig.suptitle(
-        "What the Muon server sees under LIE: a larger aggregate (top) with fewer significant directions (bottom)",
-        color=INK,
-        y=0.995,
-    )
-    return _save(fig, out, "lie_aggregate")
+    zf = lie_formula_z(*_nf(df))
+    with plt.rc_context(RC):
+        fig, axes = plt.subplots(1, len(aggs), figsize=(4.2 * len(aggs), 4.2), sharey=True, squeeze=False)
+        for ax, agg in zip(axes[0], aggs, strict=True):
+            ends = []
+            for z in zs:
+                m = _mean_curve(_sel(curves, agg, z), "test_acc")
+                if m.empty:
+                    continue
+                ax.plot(
+                    m.index,
+                    m.values,
+                    color=colors[z],
+                    linewidth=2.2 if z else 1.8,
+                    linestyle="-" if z else "--",
+                    label=_z_label(z, zf),
+                )
+                ends.append((m.values[-1], m.index[-1], colors[z]))
+            ends.sort()
+            last_y = -1.0
+            for v, r, col in ends:  # direct labels, nudged apart so they never overlap
+                y = max(v, last_y + 0.035)
+                ax.text(r + 2, y, f"{100 * v:.1f}", color=col, fontsize=9, va="center")
+                last_y = y
+            ax.set_title(f"aggregator: {_agg_name(agg)}", color=INK)
+            ax.set_xlabel("round")
+            ax.set_ylim(0, 0.95)
+            ax.set_xlim(0, curves["round"].max() * 1.14)
+        axes[0][0].set_ylabel("test accuracy")
+        handles, labels = axes[0][0].get_legend_handles_labels()
+        fig.legend(handles, labels, loc="upper center", ncol=len(labels), bbox_to_anchor=(0.5, 0.02), frameon=False)
+        fig.subplots_adjust(bottom=0.22, wspace=0.08, top=0.84, left=0.07, right=0.98)
+        fig.suptitle(
+            "FedMuon test accuracy under LIE (ResNet-18, CIFAR-10): only median at z ≥ 1 separates from the clean run",
+            color=INK,
+            x=0.01,
+            ha="left",
+        )
+    return _save(fig, out, "lie_curves")
 
 
 def make_lie_figures(results_dir: str | Path, out_dir: str | Path | None = None) -> list[Path]:
@@ -335,8 +487,10 @@ def make_lie_figures(results_dir: str | Path, out_dir: str | Path | None = None)
         raise ValueError(f"no LIE runs in {results_dir}")
     curves = load_curves(results_dir, df).merge(df[["hash", "z", "attacked"]], on="hash")
     return (
-        fig_lie_curves(curves, out)
-        + fig_lie_dose(df, curves, out)
-        + fig_lie_aggregate(df, curves, out)
+        fig_lie_final(df, out)
+        + fig_lie_timeline(df, curves, out)
+        + fig_lie_mechanism(df, curves, out)
+        + fig_lie_geometry(df, out)
         + fig_lie_shift(df, out)
+        + fig_lie_curves(df, curves, out)
     )

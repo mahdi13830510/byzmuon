@@ -97,7 +97,14 @@ def test_lie_figures(tmp_path):
             fake_run_attack(tmp_path, agg, {"name": "lie", **cfg_extra}, [0.2, 0.4, 0.7 - 0.05 * (z or 0)], extra)
     written = make_lie_figures(tmp_path)
     names = {p.name for p in written}
-    assert {"lie_curves.png", "lie_dose.png", "lie_aggregate.png", "lie_shift.png"} <= names
+    assert {
+        "lie_final.png",
+        "lie_timeline.png",
+        "lie_mechanism.png",
+        "lie_geometry.png",
+        "lie_shift.png",
+        "lie_curves.png",
+    } <= names
     assert all(p.stat().st_size > 1000 for p in written)
 
 
