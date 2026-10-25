@@ -78,13 +78,36 @@ plt.rcParams.update(
 )
 
 
+def _attack_order(labels) -> list[str]:
+    """Attack labels sorted by family (ATTACK_ORDER) then variant, so colors are assigned in a fixed order."""
+    fam = {n: i for i, n in enumerate(ATTACK_ORDER)}
+    return sorted(set(labels), key=lambda a: (fam.get(a.split()[0], len(fam)), a))
+
+
 def _color_for(name: str, order: list[str]) -> str:
     return CAT[order.index(name) % len(CAT)] if name in order else CAT[-1]
 
 
+def _attack_labels(df: pd.DataFrame) -> pd.Series:
+    """'name' plus any attack kwargs that differ between runs of the same name, e.g. 'lie z=1.0'."""
+    cols = [
+        c for c in df.columns if c.startswith("cfg.attack.") and c not in ("cfg.attack.name", "cfg.attack.knowledge")
+    ]
+    out = df["cfg.attack.name"].astype(str).copy()
+    for name, grp in df.groupby("cfg.attack.name"):
+        varying = [c for c in cols if grp[c].astype(str).nunique() > 1]
+        if varying:
+            tags = [
+                " ".join(f"{c.rsplit('.', 1)[1]}={row[c] if pd.notna(row[c]) else 'auto'}" for c in varying)
+                for _, row in grp.iterrows()
+            ]
+            out.loc[grp.index] = [f"{name} {t}" for t in tags]
+    return out
+
+
 def _label(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
-    df["attack"] = df["cfg.attack.name"]
+    df["attack"] = _attack_labels(df)
     df["opt"] = df["cfg.server_opt.name"]
     df["agg"] = df["cfg.aggregator.base.name"]
     df["seed"] = df["cfg.seed"]
@@ -150,13 +173,14 @@ def fig_curves(curves: pd.DataFrame, out: Path) -> list[Path]:
 
 def _fig_curves_one(c: pd.DataFrame, model: str, out: Path) -> list[Path]:
     aggs = sorted(c["agg"].unique())
-    fig, axes = plt.subplots(1, len(aggs), figsize=(3.4 * len(aggs), 3.0), sharey=True, squeeze=False)
+    fig, axes = plt.subplots(1, len(aggs), figsize=(3.4 * len(aggs), 3.2), sharey=True, squeeze=False)
+    order = _attack_order(c["attack"])
     for ax, agg in zip(axes[0], aggs, strict=True):
         sub = c[c["agg"] == agg]
         for (attack, opt), grp in sub.groupby(["attack", "opt"]):
             per_round = grp.groupby("round")["test_acc"]
             mean, lo, hi = per_round.mean(), per_round.min(), per_round.max()
-            color = _color_for(attack, ATTACK_ORDER)
+            color = _color_for(attack, order)
             ax.plot(
                 mean.index,
                 mean.values,
@@ -171,7 +195,10 @@ def _fig_curves_one(c: pd.DataFrame, model: str, out: Path) -> list[Path]:
         ax.set_ylim(0, 1)
     axes[0][0].set_ylabel("test accuracy")
     handles, labels = axes[0][0].get_legend_handles_labels()
-    fig.legend(handles, labels, loc="lower center", ncol=min(4, len(labels)), bbox_to_anchor=(0.5, -0.12))
+    ncol = min(4, len(labels))
+    nrow = -(-len(labels) // ncol)
+    fig.legend(handles, labels, loc="upper center", ncol=ncol, bbox_to_anchor=(0.5, -0.02), frameon=False)
+    fig.subplots_adjust(bottom=0.16 + 0.03 * nrow)
     fig.suptitle(
         f"{model}: test accuracy over rounds (solid: FedMuon, dashed: FedAvg; band: seed min–max)", color=INK, y=1.02
     )
@@ -188,23 +215,23 @@ def fig_drop(summary: pd.DataFrame, out: Path) -> list[Path]:
 
 
 def _fig_drop_one(s: pd.DataFrame, out: Path, name: str) -> list[Path]:
-    attacks = [a for a in ATTACK_ORDER if a in set(s["attack"])] + sorted(set(s["attack"]) - set(ATTACK_ORDER))
+    attacks = _attack_order(s["attack"])
     opts = [o for o in OPT_ORDER if o in set(s["opt"])]
     aggs = sorted(s["agg"].unique())
+    ncol = min(4, len(attacks))
+    nrow = -(-len(attacks) // ncol)
     fig, axes = plt.subplots(
-        1,
-        len(attacks),
-        figsize=(
-            1.0
-            + 1.6 * len(aggs) * len(attacks) / max(1, len(attacks)) * len(attacks) / len(attacks)
-            + 2.2 * len(attacks),
-            3.0,
-        ),
+        nrow,
+        ncol,
+        figsize=(1.0 + (1.2 + 0.7 * len(aggs)) * ncol, 3.0 * nrow),
         sharey=True,
         squeeze=False,
+        layout="constrained",
     )
+    for ax in axes.flat[len(attacks) :]:
+        ax.set_visible(False)
     width = 0.8 / max(1, len(opts))
-    for ax, attack in zip(axes[0], attacks, strict=True):
+    for ax, attack in zip(axes.flat, attacks, strict=False):
         sub = s[s["attack"] == attack]
         x = np.arange(len(aggs))
         for i, opt in enumerate(opts):
