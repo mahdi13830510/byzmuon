@@ -31,8 +31,9 @@ def _deep_merge(dst: dict, src: dict) -> dict:
     return dst
 
 
-def expand(sweep_path: str | Path) -> list[RunConfig]:
-    """Precedence, lowest to highest: `base` file < inline `config` < grid values < seed."""
+def expand(sweep_path: str | Path, seeds: list[int] | None = None) -> list[RunConfig]:
+    """Precedence, lowest to highest: `base` file < inline `config` < grid values < seed.
+    `seeds` overrides the file's seed list (used to add seeds to a finished sweep without editing it)."""
     with open(sweep_path) as f:
         sw = yaml.safe_load(f)
     base_dict: dict = {}
@@ -42,14 +43,20 @@ def expand(sweep_path: str | Path) -> list[RunConfig]:
     _deep_merge(base_dict, sw.get("config") or {})
     base_path = None
     grid: dict = sw.get("grid") or {}
-    seeds = sw.get("seeds") or [None]
+    seeds = seeds or sw.get("seeds") or [None]
     keys = list(grid)
     cfgs = []
     for values in itertools.product(*[grid[k] for k in keys]):
         for seed in seeds:
-            ov = [
-                f"{k}={yaml.safe_dump(v, default_flow_style=True).strip()}" for k, v in zip(keys, values, strict=True)
-            ]
+            ov = []
+            for k, v in zip(keys, values, strict=True):
+                # "a,b": [[va, vb], ...] pairs several keys so they vary together instead of as a product
+                names = [n.strip() for n in k.split(",")]
+                vals = v if len(names) > 1 else [v]
+                ov += [
+                    f"{n}={yaml.safe_dump(x, default_flow_style=True).strip()}"
+                    for n, x in zip(names, vals, strict=True)
+                ]
             if seed is not None:
                 ov.append(f"seed={seed}")
             cfgs.append(load_config(base_path, ov, base=base_dict))
@@ -90,8 +97,10 @@ def _worker(worker: int, n_gpus: int, queue, results, force: bool) -> None:
             results.put((idx, None, f"{type(e).__name__}: {e}"))
 
 
-def run_sweep(sweep_path: str | Path, workers: int = 1, force: bool = False) -> list[dict]:
-    cfgs = expand(sweep_path)
+def run_sweep(
+    sweep_path: str | Path, workers: int = 1, force: bool = False, seeds: list[int] | None = None
+) -> list[dict]:
+    cfgs = expand(sweep_path, seeds=seeds)
     if workers <= 1:
         from byzmuon.runner.run import run
 

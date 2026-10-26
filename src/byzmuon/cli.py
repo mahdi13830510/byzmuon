@@ -15,6 +15,7 @@ def main(argv: list[str] | None = None) -> None:
     s.add_argument("sweep")
     s.add_argument("--workers", type=int, default=1)
     s.add_argument("--force", action="store_true")
+    s.add_argument("--seeds", type=int, nargs="*", default=None, help="override the sweep file's seed list")
     t = sub.add_parser("results", help="print a table of finished runs")
     t.add_argument("dir", nargs="?", default="results")
     t.add_argument(
@@ -47,7 +48,7 @@ def main(argv: list[str] | None = None) -> None:
     elif args.cmd == "sweep":
         from byzmuon.runner.sweep import run_sweep
 
-        outs = run_sweep(args.sweep, workers=args.workers, force=args.force)
+        outs = run_sweep(args.sweep, workers=args.workers, force=args.force, seeds=args.seeds)
         print(f"{len(outs)} runs finished")
     elif args.cmd == "plot":
         from byzmuon.analysis import make_figures

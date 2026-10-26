@@ -11,6 +11,9 @@ class Client:
     """Trains the shared model on local data for local_steps and returns new − old as an Update.
 
     label_map, if given, rewrites the labels before training (used by data-poisoning attacks).
+    momentum > 0 keeps a persistent local momentum buffer m ← β m + (1 − β) delta across rounds and sends m instead
+    of delta ("aggregation of local momentums", Karimireddy et al. 2021); the buffer is the client's own state and
+    is never reset by the server.
     """
 
     def __init__(
@@ -23,6 +26,7 @@ class Client:
         device: torch.device,
         loss_fn: nn.Module | None = None,
         label_map: Callable[[Tensor], Tensor] | None = None,
+        momentum: float = 0.0,
     ) -> None:
         self.id = client_id
         self.model = model
@@ -32,6 +36,8 @@ class Client:
         self.device = device
         self.loss_fn = loss_fn or nn.CrossEntropyLoss()
         self.label_map = label_map
+        self.momentum = momentum
+        self.buf: dict[str, Tensor] | None = None
         self.excluded = muon_excluded(model)
         self.param_names = trainable_names(model)
         self.last_loss = float("nan")
@@ -55,6 +61,12 @@ class Client:
         self.last_loss = sum(losses) / len(losses) if losses else float("nan")
         new_state = self.model.state_dict()
         delta = {n: (new_state[n] - global_state[n]).detach().clone() for n in self.param_names}
+        if self.momentum:
+            if self.buf is None:
+                self.buf = {n: torch.zeros_like(t) for n, t in delta.items()}
+            for n, d in delta.items():
+                self.buf[n].mul_(self.momentum).add_(d, alpha=1 - self.momentum)
+            delta = {n: t.clone() for n, t in self.buf.items()}
         return Update(
             tensors=delta, meta={"client_id": self.id, "exclude_from_muon": self.excluded, "train_loss": self.last_loss}
         )

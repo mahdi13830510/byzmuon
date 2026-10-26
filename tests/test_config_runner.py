@@ -131,3 +131,35 @@ def test_kaggle_sweep_expands():
     assert len(cfgs) == 24 and len({c.hash() for c in cfgs}) == 24
     assert all(c.server_opt["name"] == "muon" and c.rounds == 150 for c in cfgs)
     assert {c.attack["name"] for c in cfgs} == {"none", "lie", "minmax", "subgap"}
+
+
+def test_sweep_paired_keys_and_seed_override(tmp_path):
+    base = tmp_path / "base.yaml"
+    yaml.safe_dump(to_dict(smoke_cfg(tmp_path)), base.open("w"))
+    sweep = tmp_path / "sweep.yaml"
+    yaml.safe_dump(
+        {
+            "base": str(base),
+            "grid": {
+                "server_opt,client_opt": [
+                    [{"name": "muon", "lr": 0.02}, {"name": "sgd", "lr": 0.05}],
+                    [{"name": "sgd", "lr": 1.0}, {"name": "sgd", "lr": 0.05, "local_momentum": 0.9}],
+                ],
+                "attack.name": ["none", "lie"],
+            },
+            "seeds": [0],
+        },
+        sweep.open("w"),
+    )
+    cfgs = expand(sweep)
+    assert len(cfgs) == 4
+    assert {(c.server_opt["name"], c.client_opt.get("local_momentum")) for c in cfgs} == {("muon", None), ("sgd", 0.9)}
+    assert [c.seed for c in expand(sweep, seeds=[3, 4])] == [3, 4] * 4 or len(expand(sweep, seeds=[3, 4])) == 8
+
+
+def test_muon_vs_momentum_sweep_expands():
+    cfgs = expand("configs/sweeps/kaggle_muon_vs_momentum.yaml")
+    assert len(cfgs) == 48 and len({c.hash() for c in cfgs}) == 48
+    mom = [c for c in cfgs if c.server_opt["name"] == "sgd"]
+    assert len(mom) == 24 and all(c.client_opt["local_momentum"] == 0.95 for c in mom)
+    assert all("local_momentum" not in c.client_opt for c in cfgs if c.server_opt["name"] == "muon")

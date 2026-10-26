@@ -1,0 +1,29 @@
+# FedMuon vs momentum SGD (aggregation of local momentums, Karimireddy et al. 2021) under LIE at several z and under
+# the dynamic-z attacks Min-Max / Min-Sum (Shejwalkar & Houmansadr, NDSS 2021). ResNet-18, CIFAR-10, 20 clients
+# (4 Byzantine), Dirichlet 0.5, 150 rounds. 2 optimizers x 8 attacks x 3 aggregators = 48 runs per seed,
+# ~40 min each on a T4; two GPUs -> ~16 h per seed. Run seed 0 first, then `--seeds 1 2` in later sessions.
+base: configs/cifar10_fedmuon_a.yaml
+config:
+  rounds: 150
+  probes:
+    - {name: evaluate, every: 5}
+    - {name: spectrum, every: 25}
+    - {name: console, every: 10}
+  out_dir: results/muon_vs_momentum
+grid:
+  server_opt,client_opt:
+    # FedMuon: plain local SGD, Muon with momentum 0.95 at the server
+    - [{name: muon, lr: 0.02, momentum: 0.95, adam_lr: 0.001}, {name: sgd, lr: 0.05}]
+    # momentum SGD: each client keeps a persistent momentum buffer (beta 0.95) and sends it; server averages, lr 1
+    - [{name: sgd, lr: 1.0}, {name: sgd, lr: 0.05, local_momentum: 0.95}]
+  attack:
+    - {name: none}
+    - {name: lie, knowledge: omniscient, z: 0.25}
+    - {name: lie, knowledge: omniscient, z: 0.5}
+    - {name: lie, knowledge: omniscient, z: 1.0}
+    - {name: lie, knowledge: omniscient, z: 2.0}
+    - {name: lie, knowledge: omniscient, z: 3.0}
+    - {name: minmax, knowledge: omniscient}
+    - {name: minsum, knowledge: omniscient}
+  aggregator.base.name: [mean, median, trimmed_mean]
+seeds: [0]

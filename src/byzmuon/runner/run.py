@@ -50,7 +50,9 @@ def build_server(cfg: RunConfig, log_path: Path | None = None) -> Server:
     byz_ids = set(rng.choice(cfg.n_clients, size=cfg.num_byz, replace=False).tolist()) if cfg.num_byz else set()
     label_map = attack.label_map(num_classes) if attack.poisons_data else None
 
-    make_opt = make_local_optimizer(cfg.client_opt)
+    client_spec = dict(cfg.client_opt)
+    local_momentum = float(client_spec.pop("local_momentum", 0.0))  # persistent per-client momentum buffer
+    make_opt = make_local_optimizer(client_spec)
     clients = [
         Client(
             i,
@@ -60,6 +62,7 @@ def build_server(cfg: RunConfig, log_path: Path | None = None) -> Server:
             cfg.local_steps,
             device,
             label_map=label_map if i in byz_ids else None,
+            momentum=local_momentum,
         )
         for i in range(cfg.n_clients)
     ]
