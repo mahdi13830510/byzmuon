@@ -15,6 +15,7 @@ restarted at any time and only unfinished runs execute.
 import itertools
 import multiprocessing as mp
 import os
+import time
 from pathlib import Path
 
 import yaml
@@ -80,7 +81,7 @@ def _count_gpus() -> int:
         return 0
 
 
-def _worker(worker: int, n_gpus: int, queue, results, force: bool) -> None:
+def _worker(worker: int, n_gpus: int, queue, results, force: bool, deadline: float | None) -> None:
     gpu = gpu_for_worker(worker, n_gpus)
     if gpu is not None:
         os.environ["CUDA_VISIBLE_DEVICES"] = gpu  # must happen before torch is imported in this process
@@ -91,20 +92,41 @@ def _worker(worker: int, n_gpus: int, queue, results, force: bool) -> None:
         if item is None:
             return
         idx, cfg = item
+        if deadline is not None and time.time() > deadline and not _is_cached(cfg):
+            results.put((idx, None, "skipped: time budget exhausted"))
+            continue
         try:
             results.put((idx, run(cfg, force=force), None))
         except Exception as e:  # keep the other runs going; report at the end
             results.put((idx, None, f"{type(e).__name__}: {e}"))
 
 
+def _is_cached(cfg: RunConfig) -> bool:
+    return (cfg.run_dir() / "final.json").exists()
+
+
 def run_sweep(
-    sweep_path: str | Path, workers: int = 1, force: bool = False, seeds: list[int] | None = None
+    sweep_path: str | Path,
+    workers: int = 1,
+    force: bool = False,
+    seeds: list[int] | None = None,
+    hours: float | None = None,
 ) -> list[dict]:
+    """Run every config of the sweep. `hours` is a wall-clock budget: once it is used up, no NEW run is started
+    (runs already going finish), so a time-limited session ends cleanly with its finished runs on disk. Skipped
+    runs are reported, not raised; rerun the same sweep later to finish them (finished runs are cached)."""
     cfgs = expand(sweep_path, seeds=seeds)
+    deadline = time.time() + hours * 3600 if hours else None
     if workers <= 1:
         from byzmuon.runner.run import run
 
-        return [run(c, force=force) for c in cfgs]
+        out = []
+        for c in cfgs:
+            if deadline is not None and time.time() > deadline and not _is_cached(c):
+                print(f"time budget exhausted; skipping {c.hash()}")
+                continue
+            out.append(run(c, force=force))
+        return out
     n_gpus = _count_gpus()
     ctx = mp.get_context("spawn")
     queue, results = ctx.Queue(), ctx.Queue()
@@ -112,18 +134,25 @@ def run_sweep(
         queue.put((i, c))
     for _ in range(workers):
         queue.put(None)
-    procs = [ctx.Process(target=_worker, args=(w, n_gpus, queue, results, force), daemon=False) for w in range(workers)]
+    procs = [
+        ctx.Process(target=_worker, args=(w, n_gpus, queue, results, force, deadline), daemon=False)
+        for w in range(workers)
+    ]
     for p in procs:
         p.start()
     out: list = [None] * len(cfgs)
-    errors = []
+    errors, skipped = [], []
     for _ in cfgs:
         idx, res, err = results.get()
         out[idx] = res
-        if err:
+        if err and err.startswith("skipped"):
+            skipped.append(cfgs[idx].hash())
+        elif err:
             errors.append((cfgs[idx].hash(), err))
     for p in procs:
         p.join()
+    if skipped:
+        print(f"time budget exhausted: {len(skipped)} of {len(cfgs)} runs not started; rerun the sweep to finish them")
     if errors:
         raise RuntimeError("some runs failed:\n" + "\n".join(f"  {h}: {e}" for h, e in errors))
-    return out
+    return [o for o in out if o is not None]

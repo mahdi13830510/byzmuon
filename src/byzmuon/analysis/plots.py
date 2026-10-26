@@ -37,9 +37,9 @@ ATTACK_ORDER = [
     "labelflip",
     "intermittent",
 ]
-OPT_ORDER = ["muon", "sgd", "adam"]
-OPT_STYLE = {"muon": "-", "sgd": "--", "adam": ":"}
-OPT_LABEL = {"muon": "FedMuon", "sgd": "FedAvg", "adam": "FedAdam"}
+OPT_ORDER = ["muon", "momsgd", "sgd", "adam"]
+OPT_STYLE = {"muon": "-", "momsgd": "--", "sgd": "--", "adam": ":"}
+OPT_LABEL = {"muon": "FedMuon", "momsgd": "Momentum SGD", "sgd": "FedAvg", "adam": "FedAdam"}
 BLUE_RAMP = [
     "#86b6ef",
     "#6da7ec",
@@ -109,6 +109,9 @@ def _label(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
     df["attack"] = _attack_labels(df)
     df["opt"] = df["cfg.server_opt.name"]
+    if "cfg.client_opt.local_momentum" in df.columns:  # server SGD over local momentum buffers = momentum SGD
+        mom = df["cfg.client_opt.local_momentum"].fillna(0).astype(float) > 0
+        df.loc[mom & (df["opt"] == "sgd"), "opt"] = "momsgd"
     df["agg"] = df["cfg.aggregator.base.name"]
     df["seed"] = df["cfg.seed"]
     df["model"] = df["cfg.model.name"] if "cfg.model.name" in df.columns else "model"

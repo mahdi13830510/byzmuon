@@ -16,7 +16,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-from byzmuon.analysis.plots import AXIS, CAT, GRID, INK, INK2, _label, _save, load_curves
+from byzmuon.analysis.plots import AXIS, CAT, GRID, INK, INK2, OPT_LABEL, OPT_ORDER, _label, _save, load_curves
 from byzmuon.runner.results import load_results
 
 NONE_COLOR = "#9a9890"
@@ -112,10 +112,11 @@ def _rounds(df: pd.DataFrame) -> int:
 
 def _setup(df: pd.DataFrame) -> str:
     n, f = _nf(df)
+    opt = OPT_LABEL.get(str(df["opt"].iloc[0]), str(df["opt"].iloc[0])) if df["opt"].nunique() == 1 else "all"
     model = str(df["cfg.model.name"].iloc[0]) if "cfg.model.name" in df.columns else "model"
     data = str(df["cfg.data.name"].iloc[0]) if "cfg.data.name" in df.columns else "data"
     pretty = {"resnet18": "ResNet-18", "cifar10": "CIFAR-10", "cifar100": "CIFAR-100", "cnn": "CNN", "mlp": "MLP"}
-    return f"{pretty.get(model, model)} on {pretty.get(data, data)}, {f} of {n} clients Byzantine"
+    return f"{opt}, {pretty.get(model, model)} on {pretty.get(data, data)}, {f} of {n} clients Byzantine"
 
 
 def _trimmed(vals: np.ndarray, f: int) -> float:
@@ -174,7 +175,7 @@ def fig_lie_final(df: pd.DataFrame, out: Path) -> list[Path]:
         ax.set_ylabel(f"test accuracy after {_rounds(df)} rounds")
         ax.legend(frameon=False, loc="upper center", ncol=len(zs))
         ax.set_title(
-            f"Final test accuracy under LIE  (FedMuon, {_setup(df)}; white: change vs. no attack, pp)",
+            f"Final test accuracy under LIE  ({_setup(df)}; white: change vs. no attack, pp)",
             color=INK,
             loc="left",
         )
@@ -213,7 +214,7 @@ def fig_lie_timeline(df: pd.DataFrame, curves: pd.DataFrame, out: Path) -> list[
         handles, labels = axes[0][0].get_legend_handles_labels()
         fig.legend(handles, labels, loc="upper center", ncol=len(labels), bbox_to_anchor=(0.5, 0.02), frameon=False)
         fig.subplots_adjust(bottom=0.24, wspace=0.08, top=0.80, left=0.08, right=0.98)
-        fig.suptitle(f"Accuracy loss under LIE over training  (FedMuon, {_setup(df)})", color=INK, x=0.01, ha="left")
+        fig.suptitle(f"Accuracy loss under LIE over training  ({_setup(df)})", color=INK, x=0.01, ha="left")
     return _save(fig, out, "lie_timeline")
 
 
@@ -261,7 +262,7 @@ def fig_lie_mechanism(df: pd.DataFrame, curves: pd.DataFrame, out: Path, window:
                 ax.set_title("Effective rank of the aggregate", color=INK)
         axes[0][0].legend(frameon=False, loc="upper left", fontsize=9)
         fig.suptitle(
-            f"Aggregate received by the Muon server under LIE, average of the last {window} rounds  ({_setup(df)})",
+            f"Aggregate received by the server under LIE, average of the last {window} rounds  ({_setup(df)})",
             color=INK,
             x=0.01,
             ha="left",
@@ -429,23 +430,71 @@ def fig_lie_curves(df: pd.DataFrame, curves: pd.DataFrame, out: Path) -> list[Pa
         handles, labels = axes[0][0].get_legend_handles_labels()
         fig.legend(handles, labels, loc="upper center", ncol=len(labels), bbox_to_anchor=(0.5, 0.02), frameon=False)
         fig.subplots_adjust(bottom=0.22, wspace=0.08, top=0.84, left=0.07, right=0.98)
-        fig.suptitle(f"Test accuracy under LIE  (FedMuon, {_setup(df)})", color=INK, x=0.01, ha="left")
+        fig.suptitle(f"Test accuracy under LIE  ({_setup(df)})", color=INK, x=0.01, ha="left")
     return _save(fig, out, "lie_curves")
 
 
+def fig_lie_compare(df: pd.DataFrame, out: Path) -> list[Path]:
+    """Final accuracy vs z, one panel per aggregator, one line per optimizer: does orthogonalization change the
+    dose-response to LIE?"""
+    aggs, zs = _aggs(df), _all_zs(df)
+    opts = [o for o in OPT_ORDER if o in set(df["opt"])] + sorted(set(df["opt"]) - set(OPT_ORDER))
+    g = df.groupby(["opt", "agg", "z"])["final_test_acc"].agg(["mean", "std"])
+    with plt.rc_context(RC):
+        fig, axes = plt.subplots(1, len(aggs), figsize=(3.9 * len(aggs), 3.9), sharey=True, squeeze=False)
+        for ax, agg in zip(axes[0], aggs, strict=True):
+            pos = list(range(len(zs)))
+            for i, opt in enumerate(opts):
+                means = [g["mean"].get((opt, agg, z), np.nan) for z in zs]
+                stds = [g["std"].get((opt, agg, z), np.nan) for z in zs]
+                ax.errorbar(
+                    pos,
+                    means,
+                    yerr=stds if any(not np.isnan(e) and e > 0 for e in stds) else None,
+                    marker="o",
+                    markersize=5,
+                    linewidth=2,
+                    color=CAT[i % len(CAT)],
+                    label=OPT_LABEL.get(opt, opt),
+                    capsize=2,
+                )
+            ax.set_xticks(pos, ["none" if z == 0 else f"{z:g}" for z in zs])
+            ax.set_xlabel("LIE strength z")
+            ax.set_title(f"aggregator: {_agg_name(agg)}", color=INK)
+        axes[0][0].set_ylabel(f"test accuracy after {_rounds(df)} rounds")
+        handles, labels = axes[0][0].get_legend_handles_labels()
+        fig.legend(handles, labels, loc="upper center", ncol=len(labels), bbox_to_anchor=(0.5, 0.02), frameon=False)
+        fig.subplots_adjust(bottom=0.22, wspace=0.08, top=0.84, left=0.07, right=0.98)
+        fig.suptitle(f"Final accuracy vs. LIE strength  ({_setup(df)})", color=INK, x=0.01, ha="left")
+    return _save(fig, out, "lie_compare")
+
+
 def make_lie_figures(results_dir: str | Path, out_dir: str | Path | None = None) -> list[Path]:
+    """One set of LIE figures per server optimizer (in a sub-folder when there are several) plus, with several
+    optimizers, a comparison figure of final accuracy vs z."""
     results_dir = Path(results_dir)
     out = Path(out_dir) if out_dir else results_dir / "figures"
     out.mkdir(parents=True, exist_ok=True)
-    df = _lie_runs(load_results(results_dir))
-    if not df["attacked"].any():
+    df_all = _lie_runs(load_results(results_dir))
+    if not df_all["attacked"].any():
         raise ValueError(f"no LIE runs in {results_dir}")
-    curves = load_curves(results_dir, df).merge(df[["hash", "z", "attacked"]], on="hash")
-    return (
-        fig_lie_final(df, out)
-        + fig_lie_timeline(df, curves, out)
-        + fig_lie_mechanism(df, curves, out)
-        + fig_lie_geometry(df, out)
-        + fig_lie_shift(df, out)
-        + fig_lie_curves(df, curves, out)
-    )
+    curves_all = load_curves(results_dir, df_all).merge(df_all[["hash", "z", "attacked"]], on="hash")
+    opts = [o for o in OPT_ORDER if o in set(df_all["opt"])] + sorted(set(df_all["opt"]) - set(OPT_ORDER))
+    paths: list[Path] = []
+    for opt in opts:
+        df, curves = df_all[df_all["opt"] == opt], curves_all[curves_all["opt"] == opt]
+        if not df["attacked"].any():
+            continue
+        sub = out if len(opts) == 1 else out / opt
+        sub.mkdir(parents=True, exist_ok=True)
+        paths += (
+            fig_lie_final(df, sub)
+            + fig_lie_timeline(df, curves, sub)
+            + fig_lie_mechanism(df, curves, sub)
+            + fig_lie_geometry(df, sub)
+            + fig_lie_shift(df, sub)
+            + fig_lie_curves(df, curves, sub)
+        )
+    if len(opts) > 1:
+        paths += fig_lie_compare(df_all, out)
+    return paths

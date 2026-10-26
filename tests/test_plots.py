@@ -108,10 +108,11 @@ def test_lie_figures(tmp_path):
     assert all(p.stat().st_size > 1000 for p in written)
 
 
-def fake_run_attack(root, agg, attack, accs, extra_metrics=None):
+def fake_run_attack(root, agg, attack, accs, extra_metrics=None, opt="muon", client=None):
     cfg = load_config(
         base={
-            "server_opt": {"name": "muon"},
+            "server_opt": {"name": opt},
+            "client_opt": client or {"name": "sgd", "lr": 0.05},
             "attack": attack,
             "seed": 0,
             "aggregator": {"base": {"name": agg}, "pre": []},
@@ -138,3 +139,21 @@ def fake_run_attack(root, agg, attack, accs, extra_metrics=None):
             }
         )
     )
+
+
+def test_lie_figures_two_optimizers(tmp_path):
+    from byzmuon.analysis import make_lie_figures
+
+    extra = {"agg_fro": 1.0, "spec/w/erank": 5.0, "test_loss": 1.0}
+    for opt, client in (
+        ("muon", {"name": "sgd", "lr": 0.05}),
+        ("sgd", {"name": "sgd", "lr": 0.05, "local_momentum": 0.9}),
+    ):
+        for agg in ("mean", "median"):
+            fake_run_attack(tmp_path, agg, {"name": "none"}, [0.2, 0.5, 0.8], extra, opt=opt, client=client)
+            for z in (1.0, 2.0):
+                fake_run_attack(
+                    tmp_path, agg, {"name": "lie", "z": z}, [0.2, 0.4, 0.7 - 0.05 * z], extra, opt=opt, client=client
+                )
+    written = {p.relative_to(tmp_path / "figures").as_posix() for p in make_lie_figures(tmp_path)}
+    assert {"muon/lie_final.png", "momsgd/lie_final.png", "lie_compare.png"} <= written

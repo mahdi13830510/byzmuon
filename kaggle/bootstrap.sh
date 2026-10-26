@@ -5,6 +5,7 @@
 # output is kept even if you close the browser. Interactive sessions are deleted after ~20 min idle.
 # Results are written directly to /kaggle/working/results (symlinked), so every finished run is already
 # in the notebook output; a killed session loses at most the runs still in progress.
+# Env knobs: HOURS (default 10) run-start budget, SEEDS="1 2" extra seeds.
 # Optional: set a Kaggle secret GITHUB_TOKEN (repo scope) and export it in the cell to also push results
 # to the `results` branch of the repo after each sweep.
 set -euo pipefail
@@ -21,10 +22,14 @@ python -c "import torch; print('torch', torch.__version__, 'cuda', torch.cuda.is
 # results from a previous session, if its output was attached as an input dataset
 for prev in /kaggle/input/*/results; do [ -d "$prev" ] && cp -rn "$prev"/. results/ 2>/dev/null || true; done
 NGPU=$(python -c "import torch;print(max(1,torch.cuda.device_count()))")
-byzmuon sweep "$SWEEP" --workers "$NGPU"   # one run per GPU; finished runs are cached by config hash
+# One run per GPU. HOURS is the budget for STARTING runs; a Kaggle commit session is killed (and its output lost)
+# at 12 h, so stop starting new runs early enough for the last ones (~45 min each) to finish. Finished runs are
+# cached by config hash: rerun the same cell in a new session (with this session's output attached as an input
+# dataset) to continue where it stopped. SEEDS="1 2" adds seeds to a finished sweep.
+byzmuon sweep "$SWEEP" --workers "$NGPU" --hours "${HOURS:-10}" ${SEEDS:+--seeds $SEEDS}
 OUT="$(python -c "import yaml;print(yaml.safe_load(open('$SWEEP'))['config']['out_dir'])")"
-byzmuon results "$OUT"
-byzmuon plot "$OUT"          # figures + summary.md land in $OUT/figures
+byzmuon results "$OUT" || true
+byzmuon plot "$OUT" --lie || true   # figures + summary.md land in $OUT/figures (partial sweeps still plot)
 (cd /kaggle/working && zip -rq results.zip results) && ls -lh /kaggle/working/results.zip
 if [ -n "${GITHUB_TOKEN:-}" ]; then
   bash kaggle/push_results.sh /kaggle/working/results

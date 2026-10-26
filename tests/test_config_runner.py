@@ -163,3 +163,16 @@ def test_muon_vs_momentum_sweep_expands():
     mom = [c for c in cfgs if c.server_opt["name"] == "sgd"]
     assert len(mom) == 24 and all(c.client_opt["local_momentum"] == 0.95 for c in mom)
     assert all("local_momentum" not in c.client_opt for c in cfgs if c.server_opt["name"] == "muon")
+
+
+def test_sweep_time_budget_skips_unstarted_runs(tmp_path, capsys):
+    base = tmp_path / "base.yaml"
+    yaml.safe_dump(to_dict(smoke_cfg(tmp_path, rounds=2)), base.open("w"))
+    sweep = tmp_path / "sweep.yaml"
+    yaml.safe_dump({"base": str(base), "grid": {"attack.name": ["none", "signflip", "lie"]}}, sweep.open("w"))
+    outs = run_sweep(sweep, hours=1e-9)  # budget already exhausted: the first run starts, then everything is skipped
+    assert len(outs) <= 1 and "time budget exhausted" in capsys.readouterr().out
+    outs = run_sweep(sweep, workers=2, hours=1e-9)
+    assert len(outs) <= 2
+    outs = run_sweep(sweep)  # no budget: finishes the rest from the cache
+    assert len(outs) == 3
