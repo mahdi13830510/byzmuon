@@ -176,3 +176,8 @@ def test_sweep_time_budget_skips_unstarted_runs(tmp_path, capsys):
     assert len(outs) <= 2
     outs = run_sweep(sweep)  # no budget: finishes the rest from the cache
     assert len(outs) == 3
+
+
+def test_tune_momsgd_sweep_expands():
+    cfgs = expand("configs/sweeps/kaggle_tune_momsgd.yaml")
+    assert len(cfgs) == 7 and all(c.rounds == 50 and c.attack["name"] == "none" for c in cfgs)

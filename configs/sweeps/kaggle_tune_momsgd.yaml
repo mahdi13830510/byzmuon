@@ -1,0 +1,22 @@
+# Tune the momentum-SGD baseline (server SGD over persistent local momentum buffers) so that its clean accuracy is
+# comparable to FedMuon's before attacking it. With server lr 1 it reached only 25% after 150 rounds (FedMuon: 81%).
+# 50 rounds, no attack, mean aggregation: 7 runs x ~13 min, under 1 h on a T4 x2. FedMuon reaches ~39% at round 50.
+base: configs/cifar10_fedmuon_a.yaml
+config:
+  rounds: 50
+  attack: {name: none}
+  aggregator: {base: {name: mean}, pre: []}
+  probes:
+    - {name: evaluate, every: 5}
+    - {name: console, every: 10}
+  out_dir: results/tune_momsgd
+grid:
+  server_opt,client_opt:
+    - [{name: sgd, lr: 2.0},  {name: sgd, lr: 0.05, local_momentum: 0.9}]
+    - [{name: sgd, lr: 5.0},  {name: sgd, lr: 0.05, local_momentum: 0.9}]
+    - [{name: sgd, lr: 10.0}, {name: sgd, lr: 0.05, local_momentum: 0.9}]
+    - [{name: sgd, lr: 20.0}, {name: sgd, lr: 0.05, local_momentum: 0.9}]
+    - [{name: sgd, lr: 5.0},  {name: sgd, lr: 0.05, local_momentum: 0.95}]
+    - [{name: sgd, lr: 10.0}, {name: sgd, lr: 0.05, local_momentum: 0.95}]
+    - [{name: muon, lr: 0.02, momentum: 0.95, adam_lr: 0.001}, {name: sgd, lr: 0.05}]
+seeds: [0]
