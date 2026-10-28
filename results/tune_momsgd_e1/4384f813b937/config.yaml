@@ -1,0 +1,38 @@
+seed: 0
+device: auto
+rounds: 50
+local_steps: 40
+batch_size: 64
+participation: 1.0
+n_clients: 20
+num_byz: 4
+num_byz_assumed: null
+data:
+  name: cifar10
+  root: data
+partition:
+  name: dirichlet
+  alpha: 0.5
+model:
+  name: resnet18
+  num_classes: 10
+client_opt:
+  local_momentum: 0.9
+  lr: 0.1
+  name: sgd
+server_opt:
+  lr: 1.0
+  name: sgd
+aggregator:
+  base:
+    name: mean
+  pre: []
+attack:
+  name: none
+probes:
+- name: evaluate
+  every: 5
+- name: console
+  every: 10
+out_dir: results/tune_momsgd_e1
+tag: ''

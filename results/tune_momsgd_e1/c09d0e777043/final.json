@@ -1,0 +1,67 @@
+{
+ "hash": "c09d0e777043",
+ "config": {
+  "seed": 0,
+  "device": "auto",
+  "rounds": 50,
+  "local_steps": 40,
+  "batch_size": 64,
+  "participation": 1.0,
+  "n_clients": 20,
+  "num_byz": 4,
+  "num_byz_assumed": null,
+  "data": {
+   "name": "cifar10",
+   "root": "data"
+  },
+  "partition": {
+   "name": "dirichlet",
+   "alpha": 0.5
+  },
+  "model": {
+   "name": "resnet18",
+   "num_classes": 10
+  },
+  "client_opt": {
+   "local_momentum": 0.9,
+   "lr": 0.05,
+   "name": "sgd"
+  },
+  "server_opt": {
+   "lr": 3.0,
+   "name": "sgd"
+  },
+  "aggregator": {
+   "base": {
+    "name": "mean"
+   },
+   "pre": []
+  },
+  "attack": {
+   "name": "none"
+  },
+  "probes": [
+   {
+    "name": "evaluate",
+    "every": 5
+   },
+   {
+    "name": "console",
+    "every": 10
+   }
+  ],
+  "out_dir": "results/tune_momsgd_e1",
+  "tag": ""
+ },
+ "elapsed_s": 2929.1808276176453,
+ "final": {
+  "round": 49,
+  "n_honest": 16,
+  "n_byz": 4,
+  "train_loss": 1.3295062110759317,
+  "agg_fro": 0.05724330246448517,
+  "elapsed_s": 2927.7983627319336
+ },
+ "best_test_acc": 0.3413,
+ "final_test_acc": 0.3413
+}

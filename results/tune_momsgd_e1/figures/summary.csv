@@ -1,0 +1,3 @@
+model,opt,agg,attack,mean,std,count,drop
+resnet18,momsgd,mean,none,0.32262,0.050243775733915544,5,0.0
+resnet18,muon,mean,none,0.496,0.0,1,0.0
