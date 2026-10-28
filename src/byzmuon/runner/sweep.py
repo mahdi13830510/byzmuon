@@ -94,9 +94,15 @@ def _worker(worker: int, n_gpus: int, queue, results, force: bool, deadline: flo
         if item is None:
             return
         idx, cfg = item
-        if deadline is not None and time.time() > deadline and not _is_cached(cfg):
+        if _is_cached(cfg) and not force:
+            results.put((idx, run(cfg), "cached"))
+            continue
+        if deadline is not None and time.time() > deadline:
             results.put((idx, None, "skipped: time budget exhausted"))
             continue
+        print(
+            f"[start] {cfg.describe()} ({cfg.hash()}) on worker {worker}" + (f", GPU {gpu}" if gpu else ""), flush=True
+        )
         try:
             results.put((idx, run(cfg, force=force), None))
         except Exception as e:  # keep the other runs going; report at the end
@@ -119,13 +125,22 @@ def run_sweep(
     runs are reported, not raised; rerun the same sweep later to finish them (finished runs are cached)."""
     cfgs = expand(sweep_path, seeds=seeds)
     deadline = time.time() + hours * 3600 if hours else None
+    t_start = time.time()
+    n_cached = sum(_is_cached(c) and not force for c in cfgs)
+    print(
+        f"sweep {Path(sweep_path).name}: {len(cfgs)} runs, {n_cached} already finished, {len(cfgs) - n_cached} to run, "
+        f"{workers} worker(s)" + (f", budget {hours:g} h" if hours else ""),
+        flush=True,
+    )
+    for c in cfgs:
+        print(f"  {'done' if _is_cached(c) and not force else 'todo'}  {c.describe()}  ({c.hash()})", flush=True)
     if workers <= 1:
         from byzmuon.runner.run import run
 
         out = []
         for c in cfgs:
             if deadline is not None and time.time() > deadline and not _is_cached(c):
-                print(f"time budget exhausted; skipping {c.hash()}")
+                print(f"[skipped] {c.describe()}: time budget exhausted", flush=True)
                 continue
             out.append(run(c, force=force))
         return out
@@ -143,18 +158,40 @@ def run_sweep(
     for p in procs:
         p.start()
     out: list = [None] * len(cfgs)
-    errors, skipped = [], []
+    errors, skipped, durations = [], [], []
+    n_done = 0
     for _ in cfgs:
         idx, res, err = results.get()
         out[idx] = res
+        c = cfgs[idx]
+        if err == "cached":
+            continue
+        n_done += 1
         if err and err.startswith("skipped"):
-            skipped.append(cfgs[idx].hash())
+            skipped.append(c.hash())
+            print(f"[skipped] {c.describe()}: time budget exhausted", flush=True)
         elif err:
-            errors.append((cfgs[idx].hash(), err))
+            errors.append((c.hash(), err))
+            print(f"[failed] {c.describe()}: {err}", flush=True)
+        else:
+            dur = float(res.get("elapsed_s", 0.0)) if isinstance(res, dict) else 0.0
+            durations.append(dur)
+            acc = res.get("final_test_acc") if isinstance(res, dict) else None
+            left = len(cfgs) - n_cached - n_done
+            eta = f", ~{max(durations) * left / workers / 3600:.1f} h for the remaining {left}" if left else ""
+            print(
+                f"[done {n_done}/{len(cfgs) - n_cached}] {c.describe()}: final acc "
+                f"{(acc if acc is not None else float('nan')):.4f} in {dur / 60:.0f} min; "
+                f"{(time.time() - t_start) / 3600:.1f} h elapsed{eta}",
+                flush=True,
+            )
     for p in procs:
         p.join()
     if skipped:
-        print(f"time budget exhausted: {len(skipped)} of {len(cfgs)} runs not started; rerun the sweep to finish them")
+        print(
+            f"time budget exhausted: {len(skipped)} of {len(cfgs)} runs not started; rerun the sweep to finish them",
+            flush=True,
+        )
     if errors:
         raise RuntimeError("some runs failed:\n" + "\n".join(f"  {h}: {e}" for h, e in errors))
     return [o for o in out if o is not None]

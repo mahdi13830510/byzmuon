@@ -36,4 +36,13 @@ class Console(Probe):
         if not self.due(r):
             return
         parts = [f"{k}={metrics[k]:.4f}" for k in self.keys if k in metrics]
-        print(f"round {r:4d} | " + " ".join(parts), flush=True)
+        tag = getattr(server, "tag", "") or ""
+        total = getattr(server, "total_rounds", 0) or 0
+        t0 = getattr(server, "t0", None)
+        head = f"[{tag}] " if tag else ""
+        prog = f"round {r + 1:4d}/{total}" if total else f"round {r:4d}"
+        eta = ""
+        if t0 is not None and total and r + 1 < total:
+            per_round = (time.time() - t0) / (r + 1)
+            eta = f" | {(time.time() - t0) / 60:.0f} min, ~{per_round * (total - r - 1) / 60:.0f} min left"
+        print(f"{head}{prog} | " + " ".join(parts) + eta, flush=True)

@@ -20,6 +20,8 @@ PIP_INSTALL=${PIP_INSTALL:-1}
 FETCH_DATA=${FETCH_DATA:-1}
 START=$(date +%s)
 left_hours() { $PY -c "import time; print(max(0.1, $HOURS - (time.time() - $START) / 3600))"; }
+stamp() { echo "=== $(date -u +%H:%M) UTC, $(( ($(date +%s) - START) / 60 )) min in: $*"; }
+backup() { if [ -n "${GITHUB_TOKEN:-}" ]; then bash kaggle/push_results.sh "$WORK/results" || echo "backup failed (continuing)"; fi; }
 
 cd "$WORK"
 [ -d byzmuon ] || git clone --depth 1 "$REPO" byzmuon
@@ -30,16 +32,23 @@ mkdir -p "$WORK/results"
 $PY -c "import torch; print('torch', torch.__version__, 'cuda', torch.cuda.is_available(), torch.cuda.device_count(), 'gpus')"
 [ "$FETCH_DATA" = 1 ] && { [ -f data/cifar10/train.npz ] || $BYZ fetch cifar10 --root data; }
 $PY kaggle/restore_cache.py "$INPUT"
+if [ -n "${GITHUB_TOKEN:-}" ]; then
+  echo "GITHUB_TOKEN set: finished runs are backed up to the results branch every 30 min"
+  ( while sleep 1800; do backup; done ) & BACKUP_PID=$!
+  trap 'kill $BACKUP_PID 2>/dev/null || true' EXIT
+else
+  echo "GITHUB_TOKEN not set: no backup during the session; if Kaggle kills it (quota or 12 h cap) the finished runs of this session are lost"
+fi
 NGPU=$($PY -c "import torch;print(max(1,torch.cuda.device_count()))")
 TUNE_OUT=$($PY -c "import yaml,sys;print(yaml.safe_load(open(sys.argv[1]))['config']['out_dir'])" "$TUNE")
 OUT=$($PY -c "import yaml,sys;print(yaml.safe_load(open(sys.argv[1]))['config']['out_dir'])" "$TEMPLATE")
 
-echo "=== 1/3 tuning the momentum-SGD baseline ($(left_hours) h left)"
+stamp "1/3 tuning the momentum-SGD baseline ($(left_hours) h of budget left)"
 $BYZ sweep "$TUNE" --workers "$NGPU" --hours "$(left_hours)"
 $BYZ results "$TUNE_OUT" || true
 $BYZ plot "$TUNE_OUT" || true
 
-echo "=== 2/3 choosing the best momentum-SGD setting"
+stamp "2/3 choosing the best momentum-SGD setting"
 $PY - "$TEMPLATE" "$SWEEP" "$TUNE_OUT" <<'PY'
 import glob, json, sys, yaml
 template, out, tune_out = sys.argv[1], sys.argv[2], sys.argv[3]
@@ -63,7 +72,7 @@ yaml.safe_dump(sw, open(out, "w"), sort_keys=False)
 print("wrote", out)
 PY
 
-echo "=== 3/3 FedMuon vs momentum SGD under LIE / Min-Max / Min-Sum ($(left_hours) h left)"
+stamp "3/3 FedMuon vs momentum SGD under LIE / Min-Max / Min-Sum ($(left_hours) h of budget left)"
 $BYZ sweep "$SWEEP" --workers "$NGPU" --hours "$(left_hours)" ${SEEDS:+--seeds $SEEDS}
 # Runs restored from an earlier session that used a different momentum-SGD setting would be averaged into the
 # figures as if they were extra seeds; move everything that is not part of this sweep out of the way.
@@ -85,5 +94,7 @@ $BYZ plot "$OUT" --lie
 cp "$SWEEP" "$OUT/sweep_used.yaml"
 rm -f "$WORK/results.zip"
 (cd "$WORK" && zip -rq results.zip results) && ls -lh "$WORK/results.zip"
-if [ -n "${GITHUB_TOKEN:-}" ]; then bash kaggle/push_results.sh "$WORK/results"; fi
-echo "=== done in $(( ($(date +%s) - START) / 60 )) min"
+backup
+TOTAL=$($PY -c "from byzmuon.runner.sweep import expand; print(len(expand('$SWEEP')))")
+DONE=$(ls -d "$OUT"/*/final.json 2>/dev/null | wc -l)
+stamp "done: $DONE of $TOTAL comparison runs finished; $([ "$DONE" -lt "$TOTAL" ] && echo "attach this session's results.zip and run the same cell again" || echo "all runs complete")"

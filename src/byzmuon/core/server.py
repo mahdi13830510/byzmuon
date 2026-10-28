@@ -1,6 +1,7 @@
 """The federated round loop. Template method with observer hooks; everything else is injected."""
 
 import random
+import time
 
 import torch
 from torch import Tensor, nn
@@ -38,6 +39,7 @@ class Server:
         self.participation, self.eval_loader = participation, eval_loader
         self.device = device or next(model.parameters()).device
         self.rng = random.Random(seed)
+        self.tag, self.total_rounds, self.t0 = "", 0, time.time()  # for log lines; set by the runner
         names = trainable_names(model)
         sd = model.state_dict()
         self.state = ServerState(

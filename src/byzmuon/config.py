@@ -33,6 +33,20 @@ class RunConfig:
     out_dir: str = "results"
     tag: str = ""
 
+    def describe(self) -> str:
+        """Short human label for logs: 'FedMuon | lie z=1.0 | median | seed 0'."""
+        opt = self.server_opt.get("name", "?")
+        if opt == "sgd" and float(self.client_opt.get("local_momentum", 0) or 0) > 0:
+            opt = "momentum SGD"
+        elif opt == "muon":
+            opt = "FedMuon"
+        atk = dict(self.attack)
+        atk_name = atk.pop("name", "none")
+        atk.pop("knowledge", None)
+        atk_s = atk_name + "".join(f" {k}={v}" for k, v in sorted(atk.items()))
+        agg = self.aggregator.get("base", {}).get("name", "?")
+        return f"{opt} | {atk_s} | {agg} | seed {self.seed}"
+
     def hash(self) -> str:
         d = asdict(self)
         d.pop("out_dir")

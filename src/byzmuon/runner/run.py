@@ -73,7 +73,7 @@ def build_server(cfg: RunConfig, log_path: Path | None = None) -> Server:
     probes = build_probes(cfg.probes)
     if log_path is not None:
         probes.append(JsonlLogger(log_path))
-    return Server(
+    server = Server(
         model,
         clients,
         byz_ids,
@@ -86,6 +86,8 @@ def build_server(cfg: RunConfig, log_path: Path | None = None) -> Server:
         eval_loader=eval_loader(test_ds),
         device=device,
     )
+    server.tag, server.total_rounds = cfg.describe(), cfg.rounds
+    return server
 
 
 def run(cfg: RunConfig, force: bool = False) -> dict:
