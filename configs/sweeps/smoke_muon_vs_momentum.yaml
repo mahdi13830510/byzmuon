@@ -1,0 +1,21 @@
+# Tiny stand-in for kaggle_muon_vs_momentum.yaml used by tests/test_run_all.sh (synthetic data, MLP, CPU, seconds).
+base: configs/smoke.yaml
+config:
+  rounds: 4
+  probes:
+    - {name: evaluate}
+    - {name: spectrum, every: 1}
+    - {name: console}
+  out_dir: results/smoke_muon_vs_momentum
+grid:
+  server_opt,client_opt:
+    - [{name: muon, lr: 0.02, momentum: 0.95}, {name: sgd, lr: 0.05}]
+    - [{name: sgd, lr: 1.0}, {name: sgd, lr: 0.05, local_momentum: 0.9}]
+  attack:
+    - {name: none}
+    - {name: lie, knowledge: omniscient, z: 0.5}
+    - {name: lie, knowledge: omniscient, z: 2.0}
+    - {name: minmax, knowledge: omniscient}
+    - {name: minsum, knowledge: omniscient}
+  aggregator.base.name: [mean, median, trimmed_mean]
+seeds: [0]

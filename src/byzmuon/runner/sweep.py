@@ -24,8 +24,10 @@ from byzmuon.config import RunConfig, load_config
 
 
 def _deep_merge(dst: dict, src: dict) -> dict:
+    """Merge src into dst. A component spec (a dict with a "name") replaces the old one wholesale, so that
+    `attack: {name: none}` does not inherit the `eps` of a base `attack: {name: subgap, eps: 0.05}`."""
     for k, v in src.items():
-        if isinstance(v, dict) and isinstance(dst.get(k), dict):
+        if isinstance(v, dict) and isinstance(dst.get(k), dict) and "name" not in v:
             _deep_merge(dst[k], v)
         else:
             dst[k] = v

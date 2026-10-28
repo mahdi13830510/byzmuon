@@ -204,3 +204,14 @@ def pathlib_root():
     from pathlib import Path
 
     return Path(__file__).resolve().parents[1]
+
+
+def test_inline_component_spec_replaces_base_spec(tmp_path):
+    import yaml
+
+    base = tmp_path / "base.yaml"
+    base.write_text(yaml.safe_dump({"attack": {"name": "subgap", "eps": 0.05}, "probes": [], "rounds": 1}))
+    sweep = tmp_path / "sweep.yaml"
+    sweep.write_text(yaml.safe_dump({"base": str(base), "config": {"attack": {"name": "none"}}, "grid": {}}))
+    (cfg,) = expand(sweep)
+    assert cfg.attack == {"name": "none"}

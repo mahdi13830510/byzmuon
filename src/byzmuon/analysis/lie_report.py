@@ -15,14 +15,28 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from matplotlib.colors import LinearSegmentedColormap, to_hex
+from matplotlib.ticker import PercentFormatter
 
-from byzmuon.analysis.plots import AXIS, CAT, GRID, INK, INK2, OPT_LABEL, OPT_ORDER, _label, _save, load_curves
+from byzmuon.analysis.plots import (
+    AGG_LABEL,
+    AXIS,
+    CAT,
+    GRID,
+    INK,
+    INK2,
+    MODEL_LABEL,
+    OPT_LABEL,
+    OPT_ORDER,
+    _label,
+    _save,
+    load_curves,
+)
 from byzmuon.runner.results import load_results
 
 NONE_COLOR = "#9a9890"
 Z_RAMP = ["#86b6ef", "#3987e5", "#1c5cab", "#0d366b"]  # light -> dark: weak -> strong attack (sequential, one hue)
 AGG_ORDER = ["mean", "median", "trimmed_mean", "krum", "bulyan", "geomed", "centered_clip"]
-AGG_LABEL = {"trimmed_mean": "trimmed mean", "centered_clip": "centered clip", "geomed": "geometric median"}
 THREE = ["mean", "median", "trimmed_mean"]
 RC = {"font.size": 11, "axes.titlesize": 11.5, "axes.labelsize": 11, "legend.fontsize": 10, "figure.titlesize": 13}
 
@@ -71,8 +85,11 @@ def _z_label(z: float, formula: float | None = None) -> str:
 
 
 def _z_colors(attack_zs: list[float]) -> dict[float, str]:
-    ramp = Z_RAMP if len(attack_zs) <= len(Z_RAMP) else Z_RAMP * (len(attack_zs) // len(Z_RAMP) + 1)
-    colors = {z: ramp[len(ramp) - len(attack_zs) + i] for i, z in enumerate(attack_zs)}  # strongest = darkest
+    """One distinct step of a light-to-dark blue ramp per attack strength (strongest = darkest), any count."""
+    cmap = LinearSegmentedColormap.from_list("z", Z_RAMP)
+    n = len(attack_zs)
+    stops = np.linspace(1.0 - 0.3 * (n - 1), 1.0, n) if n <= 3 else np.linspace(0.0, 1.0, n)
+    colors = {z: to_hex(cmap(t)) for z, t in zip(attack_zs, stops, strict=True)}
     colors[0.0] = NONE_COLOR
     return colors
 
@@ -112,11 +129,12 @@ def _rounds(df: pd.DataFrame) -> int:
 
 def _setup(df: pd.DataFrame) -> str:
     n, f = _nf(df)
-    opt = OPT_LABEL.get(str(df["opt"].iloc[0]), str(df["opt"].iloc[0])) if df["opt"].nunique() == 1 else "all"
     model = str(df["cfg.model.name"].iloc[0]) if "cfg.model.name" in df.columns else "model"
     data = str(df["cfg.data.name"].iloc[0]) if "cfg.data.name" in df.columns else "data"
-    pretty = {"resnet18": "ResNet-18", "cifar10": "CIFAR-10", "cifar100": "CIFAR-100", "cnn": "CNN", "mlp": "MLP"}
-    return f"{opt}, {pretty.get(model, model)} on {pretty.get(data, data)}, {f} of {n} clients Byzantine"
+    setup = f"{MODEL_LABEL.get(model, model)} on {MODEL_LABEL.get(data, data)}, {f} of {n} clients Byzantine"
+    if df["opt"].nunique() == 1:
+        return f"{OPT_LABEL.get(str(df['opt'].iloc[0]), str(df['opt'].iloc[0]))}, {setup}"
+    return setup
 
 
 def _trimmed(vals: np.ndarray, f: int) -> float:
@@ -173,6 +191,7 @@ def fig_lie_final(df: pd.DataFrame, out: Path) -> list[Path]:
         ax.set_xticks(x, [_agg_name(a) for a in aggs])
         ax.set_xlabel("aggregator at the server")
         ax.set_ylabel(f"test accuracy after {_rounds(df)} rounds")
+        ax.yaxis.set_major_formatter(PercentFormatter(1.0, decimals=0))
         ax.legend(frameon=False, loc="upper center", ncol=len(zs))
         ax.set_title(
             f"Final test accuracy under LIE  ({_setup(df)}; white: change vs. no attack, pp)",
@@ -250,8 +269,11 @@ def fig_lie_mechanism(df: pd.DataFrame, curves: pd.DataFrame, out: Path, window:
                 ax.bar(pos, vals, width * 0.92, color=colors[z], label=_z_label(z, zf), linewidth=0)
                 for p, v in zip(pos, vals, strict=True):
                     if not np.isnan(v):
-                        txt = f"{v:.1f}" if panel == "erank" else f"{v:.2f}x"
-                        ax.text(p, v, txt, ha="center", va="bottom", fontsize=8.5, color=INK2)
+                        txt = f"{v:.1f}" if panel == "erank" else f"{v:.1f}x"
+                        rot = 90 if len(zs) > 4 else 0  # many bars per group: upright labels would collide
+                        ax.text(
+                            p, v, txt, ha="center", va="bottom", fontsize=8 if rot else 8.5, rotation=rot, color=INK2
+                        )
             ax.set_xticks(x, [_agg_name(a) for a in aggs])
             if panel == "fro":
                 ax.axhline(1, color=AXIS, linewidth=0.9)
@@ -462,6 +484,7 @@ def fig_lie_compare(df: pd.DataFrame, out: Path) -> list[Path]:
             ax.set_xlabel("LIE strength z")
             ax.set_title(f"aggregator: {_agg_name(agg)}", color=INK)
         axes[0][0].set_ylabel(f"test accuracy after {_rounds(df)} rounds")
+        axes[0][0].yaxis.set_major_formatter(PercentFormatter(1.0, decimals=0))
         handles, labels = axes[0][0].get_legend_handles_labels()
         fig.legend(handles, labels, loc="upper center", ncol=len(labels), bbox_to_anchor=(0.5, 0.02), frameon=False)
         fig.subplots_adjust(bottom=0.22, wspace=0.08, top=0.84, left=0.07, right=0.98)

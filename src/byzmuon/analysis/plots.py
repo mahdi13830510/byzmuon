@@ -19,6 +19,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
+from matplotlib.ticker import PercentFormatter  # noqa: E402
 
 from byzmuon.runner.results import load_results  # noqa: E402
 
@@ -40,6 +41,18 @@ ATTACK_ORDER = [
 OPT_ORDER = ["muon", "momsgd", "sgd", "adam"]
 OPT_STYLE = {"muon": "-", "momsgd": "--", "sgd": "--", "adam": ":"}
 OPT_LABEL = {"muon": "FedMuon", "momsgd": "Momentum SGD", "sgd": "FedAvg", "adam": "FedAdam"}
+STYLE_WORD = {"-": "solid", "--": "dashed", ":": "dotted"}
+MODEL_LABEL = {"resnet18": "ResNet-18", "cifar10": "CIFAR-10", "cifar100": "CIFAR-100", "cnn": "CNN", "mlp": "MLP"}
+AGG_LABEL = {"trimmed_mean": "trimmed mean", "centered_clip": "centered clip", "geomed": "geometric median"}
+ATTACK_LABEL = {"none": "no attack", "lie": "LIE", "minmax": "Min-Max", "minsum": "Min-Sum", "ipm": "IPM"}
+
+
+def _attack_name(attack: str) -> str:
+    """'lie z=0.25' -> 'LIE z=0.25', 'minmax' -> 'Min-Max'."""
+    head, _, rest = attack.partition(" ")
+    return (ATTACK_LABEL.get(head, head) + (" " + rest if rest else "")).strip()
+
+
 BLUE_RAMP = [
     "#86b6ef",
     "#6da7ec",
@@ -193,18 +206,20 @@ def _fig_curves_one(c: pd.DataFrame, model: str, out: Path) -> list[Path]:
             )
             if grp["seed"].nunique() > 1:
                 ax.fill_between(mean.index, lo.values, hi.values, color=color, alpha=0.12, linewidth=0)
-        ax.set_title(f"aggregator: {agg}", color=INK)
+        ax.set_title(f"aggregator: {AGG_LABEL.get(agg, agg)}", color=INK)
         ax.set_xlabel("round")
         ax.set_ylim(0, 1)
+        ax.yaxis.set_major_formatter(PercentFormatter(1.0, decimals=0))
     axes[0][0].set_ylabel("test accuracy")
     handles, labels = axes[0][0].get_legend_handles_labels()
     ncol = min(4, len(labels))
     nrow = -(-len(labels) // ncol)
     fig.legend(handles, labels, loc="upper center", ncol=ncol, bbox_to_anchor=(0.5, -0.02), frameon=False)
     fig.subplots_adjust(bottom=0.16 + 0.03 * nrow)
-    fig.suptitle(
-        f"{model}: test accuracy over rounds (solid: FedMuon, dashed: FedAvg; band: seed min–max)", color=INK, y=1.02
-    )
+    opts = [o for o in OPT_ORDER if o in set(c["opt"])]
+    styles = ", ".join(f"{STYLE_WORD.get(OPT_STYLE.get(o, '-'), '')}: {OPT_LABEL.get(o, o)}" for o in opts)
+    band = "; band: seed min–max" if c["seed"].nunique() > 1 else ""
+    fig.suptitle(f"Test accuracy over rounds, {MODEL_LABEL.get(model, model)} ({styles}{band})", color=INK, y=1.02)
     return _save(fig, out, f"curves_{model}")
 
 
@@ -264,11 +279,67 @@ def _fig_drop_one(s: pd.DataFrame, out: Path, name: str) -> list[Path]:
                         color=INK2,
                     )
         ax.axhline(0, color=AXIS, linewidth=0.8)
-        ax.set_xticks(x, aggs, rotation=20)
+        ax.set_xticks(x, [AGG_LABEL.get(a, a) for a in aggs], rotation=20)
+        ax.yaxis.set_major_formatter(PercentFormatter(1.0, decimals=0))
         ax.set_title(f"attack: {attack}", color=INK)
-    axes[0][0].set_ylabel("accuracy drop vs. no attack")
+    axes[0][0].set_ylabel("accuracy lost vs. no attack")
     axes[0][0].legend(loc="upper left")
-    fig.suptitle("Accuracy lost to the attack (higher = more damage); error bars: std over seeds", color=INK)
+    errs_note = "; error bars: std over seeds" if s["std"].fillna(0).gt(0).any() else ""
+    fig.suptitle(f"Accuracy lost to the attack (percentage points{errs_note})", color=INK)
+    return _save(fig, out, name)
+
+
+def fig_attack_compare(summary: pd.DataFrame, out: Path) -> list[Path]:
+    """Final accuracy under every attack, one panel per aggregator, grouped bars per optimizer: the one-figure
+    answer to 'does FedMuon hold up better than momentum SGD?'. Only drawn when there are >= 2 optimizers."""
+    if summary.empty or summary["opt"].nunique() < 2:
+        return []
+    paths = []
+    for model in sorted(summary["model"].unique()):
+        s = summary[summary["model"] == model]
+        name = "attack_compare" if summary["model"].nunique() == 1 else f"attack_compare_{model}"
+        paths += _fig_attack_compare_one(s, model, out, name)
+    return paths
+
+
+def _fig_attack_compare_one(s: pd.DataFrame, model: str, out: Path, name: str) -> list[Path]:
+    attacks = _attack_order(s["attack"])
+    opts = [o for o in OPT_ORDER if o in set(s["opt"])] + sorted(set(s["opt"]) - set(OPT_ORDER))
+    aggs = sorted(s["agg"].unique())
+    fig, axes = plt.subplots(
+        len(aggs), 1, figsize=(1.5 + 0.95 * len(attacks) * len(opts), 2.9 * len(aggs)), sharex=True, squeeze=False
+    )
+    width = 0.8 / len(opts)
+    x = np.arange(len(attacks))
+    for ax, agg in zip(axes[:, 0], aggs, strict=True):
+        sub = s[s["agg"] == agg]
+        for i, opt in enumerate(opts):
+            rows = [sub[(sub["attack"] == a) & (sub["opt"] == opt)] for a in attacks]
+            vals = [float(r["mean"].iloc[0]) if len(r) else np.nan for r in rows]
+            errs = [float(r["std"].iloc[0]) if len(r) else 0.0 for r in rows]
+            pos = x + (i - (len(opts) - 1) / 2) * width
+            ax.bar(
+                pos,
+                vals,
+                width * 0.9,
+                color=_color_for(opt, OPT_ORDER),
+                label=OPT_LABEL.get(opt, opt),
+                yerr=errs if any(e > 0 for e in errs) else None,
+                ecolor=INK2,
+                capsize=2,
+                linewidth=0,
+            )
+            for p_, v in zip(pos, vals, strict=True):
+                if not np.isnan(v):
+                    ax.text(p_, v + 0.01, f"{100 * v:.0f}", ha="center", va="bottom", fontsize=7.5, color=INK2)
+        ax.set_ylim(0, 1.0)
+        ax.yaxis.set_major_formatter(PercentFormatter(1.0, decimals=0))
+        ax.set_ylabel("final accuracy")
+        ax.set_title(f"aggregator: {AGG_LABEL.get(agg, agg)}", color=INK, loc="left")
+    axes[-1, 0].set_xticks(x, [_attack_name(a) for a in attacks], rotation=20, ha="right")
+    axes[0, 0].legend(loc="upper right", ncol=len(opts))
+    fig.suptitle(f"Final test accuracy under each attack, {MODEL_LABEL.get(model, model)}", color=INK)
+    fig.tight_layout()
     return _save(fig, out, name)
 
 
@@ -401,6 +472,7 @@ def make_figures(results_dir: str | Path, out_dir: str | Path | None = None) -> 
     written = write_summary(summary, out)
     written += fig_curves(curves, out)
     written += fig_drop(summary, out)
+    written += fig_attack_compare(summary, out)
     written += fig_amplification(curves, out)
     written += fig_spectrum(curves, out)
     return written
