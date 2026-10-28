@@ -20,7 +20,7 @@ pip install -q -e . --no-deps --ignore-requires-python
 python -c "import torch; print('torch', torch.__version__, 'cuda', torch.cuda.is_available(), torch.cuda.device_count(), 'gpus')"
 [ -f data/cifar10/train.npz ] || byzmuon fetch cifar10 --root data
 # results from a previous session, if its output was attached as an input dataset
-for prev in /kaggle/input/*/results; do [ -d "$prev" ] && cp -rn "$prev"/. results/ 2>/dev/null || true; done
+python kaggle/restore_cache.py /kaggle/input
 NGPU=$(python -c "import torch;print(max(1,torch.cuda.device_count()))")
 # One run per GPU. HOURS is the budget for STARTING runs; a Kaggle commit session is killed (and its output lost)
 # at 12 h, so stop starting new runs early enough for the last ones (~45 min each) to finish. Finished runs are

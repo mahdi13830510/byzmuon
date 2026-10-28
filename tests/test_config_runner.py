@@ -180,4 +180,27 @@ def test_sweep_time_budget_skips_unstarted_runs(tmp_path, capsys):
 
 def test_tune_momsgd_sweep_expands():
     cfgs = expand("configs/sweeps/kaggle_tune_momsgd.yaml")
-    assert len(cfgs) == 7 and all(c.rounds == 50 and c.attack["name"] == "none" for c in cfgs)
+    assert len(cfgs) == 6 and all(c.rounds == 50 and c.attack["name"] == "none" for c in cfgs)
+    assert all(c.client_opt["momentum"] == 0.9 and c.client_opt["local_momentum"] == 0.9 for c in cfgs)
+
+
+def test_restore_cache_copies_runs_by_out_dir_and_hash(tmp_path, monkeypatch):
+    import json
+    import runpy
+
+    run = tmp_path / "input" / "ds" / "anything" / "abc123"
+    run.mkdir(parents=True)
+    (run / "final.json").write_text(json.dumps({"hash": "abc123", "config": {"out_dir": "results/sweep"}}))
+    (run / "metrics.jsonl").write_text("{}\n")
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    monkeypatch.chdir(repo)
+    monkeypatch.setattr("sys.argv", ["restore_cache.py", str(tmp_path / "input")])
+    runpy.run_path(str(pathlib_root() / "kaggle" / "restore_cache.py"), run_name="__main__")
+    assert (repo / "results" / "sweep" / "abc123" / "metrics.jsonl").exists()
+
+
+def pathlib_root():
+    from pathlib import Path
+
+    return Path(__file__).resolve().parents[1]
