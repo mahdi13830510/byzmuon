@@ -38,9 +38,15 @@ ATTACK_ORDER = [
     "labelflip",
     "intermittent",
 ]
-OPT_ORDER = ["muon", "momsgd", "sgd", "adam"]
-OPT_STYLE = {"muon": "-", "momsgd": "--", "sgd": "--", "adam": ":"}
-OPT_LABEL = {"muon": "FedMuon", "momsgd": "Momentum SGD", "sgd": "FedAvg", "adam": "FedAdam"}
+OPT_ORDER = ["muon", "normsgd", "momsgd", "sgd", "adam"]
+OPT_STYLE = {"muon": "-", "normsgd": "--", "momsgd": "--", "sgd": "--", "adam": ":"}
+OPT_LABEL = {
+    "muon": "FedMuon",
+    "normsgd": "Momentum SGD (normalized)",
+    "momsgd": "Momentum SGD",
+    "sgd": "FedAvg",
+    "adam": "FedAdam",
+}
 STYLE_WORD = {"-": "solid", "--": "dashed", ":": "dotted"}
 MODEL_LABEL = {"resnet18": "ResNet-18", "cifar10": "CIFAR-10", "cifar100": "CIFAR-100", "cnn": "CNN", "mlp": "MLP"}
 AGG_LABEL = {"trimmed_mean": "trimmed mean", "centered_clip": "centered clip", "geomed": "geometric median"}

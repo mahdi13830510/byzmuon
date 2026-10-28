@@ -1,9 +1,11 @@
-# Tune the momentum-SGD baseline (server SGD over persistent local momentum buffers) so that its clean accuracy is
-# comparable to FedMuon's before attacking it. FedMuon's orthogonalized step has Frobenius norm ~1.4 per round,
-# about 17x the mean client delta, so plain FedAvg-style steps (client lr 0.05, server lr 1) reach only 25% after
-# 150 rounds (FedMuon: 81%); even server lr 20 without in-round momentum gives 40%. Here the clients also use
-# in-round momentum 0.9 (torch SGD), which makes a 10-step delta ~4x larger, and the server lr is swept.
-# 50 rounds, no attack, mean aggregation: 6 runs x ~13 min, ~40 min on a T4 x2. FedMuon reaches ~36-39% at round 50.
+# Tune the momentum-SGD baseline so that its clean accuracy is comparable to FedMuon's before attacking it.
+# Why this is hard: FedMuon's orthogonalized step has Frobenius norm ~1.4 per round regardless of the aggregate,
+# while the mean client delta is ~0.08 and shrinks to ~0.01 as the non-IID deltas cancel. A fixed server lr on top
+# of that mean cannot keep up: lr 1 -> 25%, lr 20 -> 40% after 150 rounds (FedMuon: 81%); in-round client momentum
+# with lr 2-10 -> 16-18% at round 50. The main candidate is therefore `normsgd`: momentum SGD whose per-matrix step is
+# rescaled to Muon's step norm (same size, no orthogonalization), the cleanest control for "is it the
+# orthogonalization?". Plain server SGD at very large lr is kept as a fallback; run_all.sh picks the best.
+# 50 rounds, no attack, mean aggregation: 8 runs x ~13 min, ~55 min on a T4 x2. FedMuon reaches ~36-39% at round 50.
 base: configs/cifar10_fedmuon_a.yaml
 config:
   rounds: 50
@@ -12,13 +14,15 @@ config:
   probes:
     - {name: evaluate, every: 5}
     - {name: console, every: 10}
-  out_dir: results/tune_momsgd2
+  out_dir: results/tune_momsgd3
 grid:
   server_opt,client_opt:
-    - [{name: sgd, lr: 2.0},  {name: sgd, lr: 0.05, momentum: 0.9, local_momentum: 0.9}]
-    - [{name: sgd, lr: 5.0},  {name: sgd, lr: 0.05, momentum: 0.9, local_momentum: 0.9}]
-    - [{name: sgd, lr: 10.0}, {name: sgd, lr: 0.05, momentum: 0.9, local_momentum: 0.9}]
-    - [{name: sgd, lr: 2.0},  {name: sgd, lr: 0.1, momentum: 0.9, local_momentum: 0.9}]
-    - [{name: sgd, lr: 5.0},  {name: sgd, lr: 0.1, momentum: 0.9, local_momentum: 0.9}]
-    - [{name: sgd, lr: 0.5, momentum: 0.9}, {name: sgd, lr: 0.05, momentum: 0.9, local_momentum: 0.9}]
+    - [{name: normsgd, lr: 0.02, momentum: 0.95, adam_lr: 0.001},  {name: sgd, lr: 0.05, local_momentum: 0.9}]
+    - [{name: normsgd, lr: 0.02, momentum: 0.95, adam_lr: 0.001},  {name: sgd, lr: 0.05}]
+    - [{name: normsgd, lr: 0.01, momentum: 0.95, adam_lr: 0.001},  {name: sgd, lr: 0.05, local_momentum: 0.9}]
+    - [{name: normsgd, lr: 0.005, momentum: 0.95, adam_lr: 0.001}, {name: sgd, lr: 0.05, local_momentum: 0.9}]
+    - [{name: normsgd, lr: 0.002, momentum: 0.95, adam_lr: 0.001}, {name: sgd, lr: 0.05, local_momentum: 0.9}]
+    - [{name: sgd, lr: 50.0},  {name: sgd, lr: 0.05, local_momentum: 0.9}]
+    - [{name: sgd, lr: 100.0}, {name: sgd, lr: 0.05, local_momentum: 0.9}]
+    - [{name: sgd, lr: 20.0},  {name: sgd, lr: 0.02, local_momentum: 0.9}]
 seeds: [0]

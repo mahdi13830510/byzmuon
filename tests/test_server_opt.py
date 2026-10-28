@@ -3,7 +3,14 @@ import torch
 
 from byzmuon.core.update import Update
 from byzmuon.optim.orthogonalize import ExactPolar
-from byzmuon.optim.server_opt import ServerAdam, ServerMuon, ServerSGD, ServerState, build_server_opt
+from byzmuon.optim.server_opt import (
+    ServerAdam,
+    ServerMuon,
+    ServerNormSGD,
+    ServerSGD,
+    ServerState,
+    build_server_opt,
+)
 
 
 def state_and_update():
@@ -69,3 +76,28 @@ def test_build_server_opt_from_spec():
     assert type(opt.orthogonalizer).__name__ == "RegularizedPolar"
     with pytest.raises(KeyError):
         build_server_opt({"name": "nope"})
+
+
+def test_server_normsgd_matches_muon_step_norm_but_keeps_direction():
+    st_m, agg = state_and_update()
+    st_n = ServerState(params={k: v.clone() for k, v in st_m.params.items()}, exclude_from_muon=set())
+    ServerMuon(lr=0.1, momentum=0.0, nesterov=False, orthogonalizer=ExactPolar()).step(st_m, agg)
+    ServerNormSGD(lr=0.1, momentum=0.0, nesterov=False).step(st_n, agg)
+    assert torch.allclose(st_m.params["w"].norm(), st_n.params["w"].norm(), rtol=1e-4)  # same Frobenius step size
+    direction = agg.tensors["w"] / agg.tensors["w"].norm()
+    step = st_n.params["w"] / st_n.params["w"].norm()
+    assert torch.allclose(direction, step, atol=1e-5)  # along the aggregate, not its polar factor
+    assert (st_n.params["b"] > 0).all()  # non-matrix parameters: Adam
+
+
+def test_server_normsgd_step_is_independent_of_aggregate_scale():
+    st1, agg = state_and_update()
+    st2 = ServerState(params={k: v.clone() for k, v in st1.params.items()}, exclude_from_muon=set())
+    small = Update(tensors={k: 1e-3 * v for k, v in agg.tensors.items()}, meta={"exclude_from_muon": set()})
+    ServerNormSGD(lr=0.1, momentum=0.0, nesterov=False).step(st1, agg)
+    ServerNormSGD(lr=0.1, momentum=0.0, nesterov=False).step(st2, small)
+    assert torch.allclose(st1.params["w"], st2.params["w"], atol=1e-5)
+
+
+def test_build_normsgd_from_spec():
+    assert isinstance(build_server_opt({"name": "normsgd", "lr": 0.02}), ServerNormSGD)

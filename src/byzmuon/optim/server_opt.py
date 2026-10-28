@@ -140,6 +140,53 @@ class ServerMuon(ServerOptimizer):
         return state
 
 
+@register("server_opt", "normsgd")
+class ServerNormSGD(ServerOptimizer):
+    """Momentum SGD with Muon's step size but without orthogonalization: the control for FedMuon.
+
+    Identical to ServerMuon (EMA momentum, Nesterov, Adam for non-matrix parameters, sqrt(rows/cols) scale) except
+    that each matrix momentum is rescaled to the Frobenius norm of Muon's semi-orthogonal step, sqrt(min(rows, cols)),
+    instead of being replaced by its polar factor. The per-round step norm is therefore the same as FedMuon's, so
+    the step size no longer depends on how much the client deltas cancel, and the only remaining difference to
+    FedMuon is the direction (polar factor vs. the momentum itself).
+    """
+
+    def __init__(
+        self,
+        lr: float = 0.02,
+        momentum: float = 0.95,
+        nesterov: bool = True,
+        weight_decay: float = 0.0,
+        adam_lr: float = 3e-4,
+        adam_betas: tuple[float, float] = (0.9, 0.95),
+        adam_eps: float = 1e-8,
+        eps: float = 1e-12,
+    ) -> None:
+        super().__init__(lr, weight_decay)
+        self.momentum, self.nesterov, self.eps = momentum, nesterov, eps
+        self.adam_lr, self.adam_betas, self.adam_eps = adam_lr, tuple(adam_betas), adam_eps
+
+    def step(self, state: ServerState, agg: Update) -> ServerState:
+        matrix = set(agg.matrix_names())
+        for n, delta in agg.tensors.items():
+            g = -delta
+            self._decay(state, n)
+            if n not in matrix:
+                _adam_step(state, n, g, self.adam_lr, self.adam_betas, self.adam_eps)
+                continue
+            buf = state.momentum.get(n)
+            buf = g.clone() if buf is None else buf.lerp_(g, 1 - self.momentum)
+            state.momentum[n] = buf
+            upd = g.lerp(buf, self.momentum) if self.nesterov else buf
+            m2d = upd.reshape(upd.shape[0], -1)
+            target = min(m2d.shape) ** 0.5  # ||UV^T||_F of a rank-min(m,k) polar factor
+            o = (m2d * (target / (m2d.norm() + self.eps))).reshape(upd.shape)
+            scale = max(1.0, m2d.shape[0] / m2d.shape[1]) ** 0.5
+            state.params[n].add_(o.to(state.params[n].dtype), alpha=-self.lr * scale)
+        state.round += 1
+        return state
+
+
 def build_orthogonalizer(spec: Orthogonalizer | dict | str | None) -> Orthogonalizer:
     if spec is None:
         return NewtonSchulz()

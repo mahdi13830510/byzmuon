@@ -180,8 +180,8 @@ def test_sweep_time_budget_skips_unstarted_runs(tmp_path, capsys):
 
 def test_tune_momsgd_sweep_expands():
     cfgs = expand("configs/sweeps/kaggle_tune_momsgd.yaml")
-    assert len(cfgs) == 6 and all(c.rounds == 50 and c.attack["name"] == "none" for c in cfgs)
-    assert all(c.client_opt["momentum"] == 0.9 and c.client_opt["local_momentum"] == 0.9 for c in cfgs)
+    assert len(cfgs) == 8 and all(c.rounds == 50 and c.attack["name"] == "none" for c in cfgs)
+    assert {c.server_opt["name"] for c in cfgs} == {"normsgd", "sgd"}
 
 
 def test_restore_cache_copies_runs_by_out_dir_and_hash(tmp_path, monkeypatch):

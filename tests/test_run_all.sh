@@ -18,9 +18,11 @@ bash "$ROOT/kaggle/run_all.sh" > "$TMP/log1" 2>&1 || { tail -30 "$TMP/log1"; exi
 grep -q "restored 0 cached runs" "$TMP/log1"
 OUT="$WORK/results/smoke_muon_vs_momentum"
 [ "$(ls -d "$OUT"/*/ | grep -vc figures)" = 30 ] || { echo "expected 30 runs"; ls "$OUT"; exit 1; }
-for f in lie_compare.png attack_compare.png drop.png muon/lie_final.png momsgd/lie_final.png momsgd/lie_timeline.png summary.md; do
+for f in lie_compare.png attack_compare.png drop.png muon/lie_final.png summary.md; do
   [ -s "$OUT/figures/$f" ] || { echo "missing figure $f"; exit 1; }
 done
+# one LIE sub-folder per optimizer (FedMuon + whichever baseline the tuner picked)
+[ "$(ls "$OUT"/figures/*/lie_final.png | wc -l)" = 2 ] || { echo "expected 2 per-optimizer LIE folders"; exit 1; }
 grep -q "Momentum SGD" "$OUT/figures/summary.md"
 [ -s "$WORK/results.zip" ]
 

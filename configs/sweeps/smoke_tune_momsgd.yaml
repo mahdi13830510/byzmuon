@@ -10,6 +10,6 @@ config:
   out_dir: results/smoke_tune_momsgd
 grid:
   server_opt,client_opt:
-    - [{name: sgd, lr: 2.0}, {name: sgd, lr: 0.05, momentum: 0.9, local_momentum: 0.9}]
+    - [{name: normsgd, lr: 0.02}, {name: sgd, lr: 0.05, local_momentum: 0.9}]
     - [{name: sgd, lr: 0.5, momentum: 0.9}, {name: sgd, lr: 0.05, momentum: 0.9, local_momentum: 0.9}]
 seeds: [0]

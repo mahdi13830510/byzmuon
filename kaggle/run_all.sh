@@ -48,7 +48,7 @@ template, out, tune_out = sys.argv[1], sys.argv[2], sys.argv[3]
 best = None
 for f in glob.glob(f"{tune_out}/*/final.json"):
     d = json.load(open(f)); c = d["config"]
-    if c["server_opt"]["name"] != "sgd" or d.get("final_test_acc") is None:
+    if c["server_opt"]["name"] == "muon" or d.get("final_test_acc") is None:
         continue
     acc = float(d["final_test_acc"])
     print(f"  {100 * acc:5.1f}%  server {c['server_opt']}  client {c['client_opt']}")
