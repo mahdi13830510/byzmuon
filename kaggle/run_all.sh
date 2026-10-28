@@ -1,18 +1,16 @@
 #!/usr/bin/env bash
-# One-session pipeline: (1) tune the momentum-SGD baseline, (2) pick the best setting, (3) run the full
-# FedMuon-vs-momentum-SGD comparison with that setting, (4) figures + results.zip.
+# Pipeline: (1) tune federated momentum SGD, (2) pick the best setting, (3) run the FedMuon-vs-momentum-SGD
+# comparison with that setting (both at one local epoch per round), (4) figures + results.zip.
+# The 48 comparison runs take ~2.5 h each, so this needs several sessions: re-run the same cell with the previous
+# session's results.zip attached as a dataset each time; finished runs (tuning included) are restored and skipped.
 #   !git clone --depth 1 https://github.com/mahdi13830510/byzmuon.git /kaggle/working/byzmuon 2>/dev/null; bash /kaggle/working/byzmuon/kaggle/run_all.sh
-# Attach the previous session's output (or a results.zip dataset) as an input: finished runs are restored from it,
-# and the whole pipeline then fits in one 12 h session (~40 min tuning + ~8 h for the 24 momentum-SGD runs).
-# Without that input it also trains the 24 FedMuon runs and stops starting runs at the HOURS budget (default 10.5),
-# so a second session with this one's output attached finishes the rest.
 # Every path/command can be overridden through the environment so the same script can be dry-run locally
 # (see tests/test_run_all.sh).
 set -euo pipefail
 REPO=${REPO:-https://github.com/mahdi13830510/byzmuon.git}
 WORK=${WORK:-/kaggle/working}
 INPUT=${INPUT:-/kaggle/input}
-HOURS=${HOURS:-10.5}
+HOURS=${HOURS:-8.5}  # runs take up to ~2.5 h; nothing may start after this or the 12 h cap kills the session
 TUNE=${TUNE:-configs/sweeps/kaggle_tune_momsgd.yaml}
 TEMPLATE=${TEMPLATE:-configs/sweeps/kaggle_muon_vs_momentum.yaml}
 SWEEP=${SWEEP:-configs/sweeps/generated_muon_vs_momentum.yaml}

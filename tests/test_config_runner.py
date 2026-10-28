@@ -161,8 +161,9 @@ def test_muon_vs_momentum_sweep_expands():
     cfgs = expand("configs/sweeps/kaggle_muon_vs_momentum.yaml")
     assert len(cfgs) == 48 and len({c.hash() for c in cfgs}) == 48
     mom = [c for c in cfgs if c.server_opt["name"] == "sgd"]
-    assert len(mom) == 24 and all(c.client_opt["local_momentum"] == 0.95 for c in mom)
+    assert len(mom) == 24 and all(c.client_opt["local_momentum"] == 0.9 for c in mom)
     assert all("local_momentum" not in c.client_opt for c in cfgs if c.server_opt["name"] == "muon")
+    assert all(c.local_steps == 40 for c in cfgs)  # one local epoch for both optimizers
 
 
 def test_sweep_time_budget_skips_unstarted_runs(tmp_path, capsys):
@@ -180,8 +181,8 @@ def test_sweep_time_budget_skips_unstarted_runs(tmp_path, capsys):
 
 def test_tune_momsgd_sweep_expands():
     cfgs = expand("configs/sweeps/kaggle_tune_momsgd.yaml")
-    assert len(cfgs) == 8 and all(c.rounds == 50 and c.attack["name"] == "none" for c in cfgs)
-    assert {c.server_opt["name"] for c in cfgs} == {"normsgd", "sgd"}
+    assert len(cfgs) == 6 and all(c.rounds == 50 and c.local_steps == 40 for c in cfgs)
+    assert {c.server_opt["name"] for c in cfgs} == {"sgd", "muon"}
 
 
 def test_restore_cache_copies_runs_by_out_dir_and_hash(tmp_path, monkeypatch):
