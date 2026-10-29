@@ -1,0 +1,71 @@
+{
+ "hash": "2ef966b00e01",
+ "config": {
+  "seed": 0,
+  "device": "auto",
+  "rounds": 150,
+  "local_steps": 40,
+  "batch_size": 64,
+  "participation": 1.0,
+  "n_clients": 20,
+  "num_byz": 4,
+  "num_byz_assumed": null,
+  "data": {
+   "name": "cifar10",
+   "root": "data"
+  },
+  "partition": {
+   "name": "dirichlet",
+   "alpha": 0.5
+  },
+  "model": {
+   "name": "resnet18",
+   "num_classes": 10
+  },
+  "client_opt": {
+   "local_momentum": 0.5,
+   "lr": 0.05,
+   "name": "sgd"
+  },
+  "server_opt": {
+   "lr": 1.0,
+   "name": "sgd"
+  },
+  "aggregator": {
+   "base": {
+    "name": "median"
+   },
+   "pre": []
+  },
+  "attack": {
+   "name": "none"
+  },
+  "probes": [
+   {
+    "name": "evaluate",
+    "every": 5
+   },
+   {
+    "name": "spectrum",
+    "every": 25
+   },
+   {
+    "name": "console",
+    "every": 10
+   }
+  ],
+  "out_dir": "results/muon_vs_momentum_e1",
+  "tag": ""
+ },
+ "elapsed_s": 8596.339245080948,
+ "final": {
+  "round": 149,
+  "n_honest": 16,
+  "n_byz": 4,
+  "train_loss": 0.8319869708269835,
+  "agg_fro": 0.14009201526641846,
+  "elapsed_s": 8593.312919139862
+ },
+ "best_test_acc": 0.6171,
+ "final_test_acc": 0.6171
+}
