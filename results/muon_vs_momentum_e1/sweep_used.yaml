@@ -1,0 +1,52 @@
+base: configs/cifar10_fedmuon_a.yaml
+config:
+  rounds: 150
+  local_steps: 40
+  probes:
+  - name: evaluate
+    every: 5
+  - name: spectrum
+    every: 25
+  - name: console
+    every: 10
+  out_dir: results/muon_vs_momentum_e1
+grid:
+  server_opt,client_opt:
+  - - lr: 1.0
+      name: sgd
+    - local_momentum: 0.5
+      lr: 0.05
+      name: sgd
+  - - name: muon
+      lr: 0.02
+      momentum: 0.95
+      adam_lr: 0.001
+    - name: sgd
+      lr: 0.05
+  attack:
+  - name: none
+  - name: lie
+    knowledge: omniscient
+    z: 0.25
+  - name: lie
+    knowledge: omniscient
+    z: 0.5
+  - name: lie
+    knowledge: omniscient
+    z: 1.0
+  - name: lie
+    knowledge: omniscient
+    z: 2.0
+  - name: lie
+    knowledge: omniscient
+    z: 3.0
+  - name: minmax
+    knowledge: omniscient
+  - name: minsum
+    knowledge: omniscient
+  aggregator.base.name:
+  - mean
+  - median
+  - trimmed_mean
+seeds:
+- 0

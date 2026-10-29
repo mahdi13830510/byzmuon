@@ -1,0 +1,7 @@
+model,opt,agg,attack,mean,std,count,drop
+resnet18,momsgd,mean,lie,0.6136,0.0,1,-0.00660000000000005
+resnet18,momsgd,mean,none,0.607,0.0,1,0.0
+resnet18,momsgd,median,lie,0.6027,0.0,1,0.014399999999999968
+resnet18,momsgd,median,none,0.6171,0.0,1,0.0
+resnet18,momsgd,trimmed_mean,lie,0.6129,0.0,1,-0.005499999999999949
+resnet18,momsgd,trimmed_mean,none,0.6074,0.0,1,0.0
