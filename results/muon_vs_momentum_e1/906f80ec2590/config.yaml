@@ -1,0 +1,42 @@
+seed: 0
+device: auto
+rounds: 150
+local_steps: 40
+batch_size: 64
+participation: 1.0
+n_clients: 20
+num_byz: 4
+num_byz_assumed: null
+data:
+  name: cifar10
+  root: data
+partition:
+  name: dirichlet
+  alpha: 0.5
+model:
+  name: resnet18
+  num_classes: 10
+client_opt:
+  local_momentum: 0.5
+  lr: 0.05
+  name: sgd
+server_opt:
+  lr: 1.0
+  name: sgd
+aggregator:
+  base:
+    name: trimmed_mean
+  pre: []
+attack:
+  knowledge: omniscient
+  name: lie
+  z: 0.25
+probes:
+- name: evaluate
+  every: 5
+- name: spectrum
+  every: 25
+- name: console
+  every: 10
+out_dir: results/muon_vs_momentum_e1
+tag: ''
