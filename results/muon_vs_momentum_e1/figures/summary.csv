@@ -3,13 +3,21 @@ resnet18,momsgd,mean,lie z=0.25,0.6136,0.0,1,-0.00660000000000005
 resnet18,momsgd,mean,lie z=0.5,0.6189,0.0,1,-0.011900000000000022
 resnet18,momsgd,mean,lie z=1.0,0.6086,0.0,1,-0.0016000000000000458
 resnet18,momsgd,mean,lie z=2.0,0.5594,0.0,1,0.047599999999999976
+resnet18,momsgd,mean,lie z=3.0,0.5042,0.0,1,0.1028
+resnet18,momsgd,mean,minmax,0.2925,0.0,1,0.3145
+resnet18,momsgd,mean,minsum,0.4009,0.0,1,0.2061
 resnet18,momsgd,mean,none,0.607,0.0,1,0.0
 resnet18,momsgd,median,lie z=0.25,0.6027,0.0,1,0.014399999999999968
 resnet18,momsgd,median,lie z=0.5,0.5588,0.0,1,0.05830000000000002
 resnet18,momsgd,median,lie z=1.0,0.5431,0.0,1,0.07399999999999995
 resnet18,momsgd,median,lie z=2.0,0.5434,0.0,1,0.07369999999999999
+resnet18,momsgd,median,lie z=3.0,0.5451,0.0,1,0.07199999999999995
+resnet18,momsgd,median,minmax,0.4289,0.0,1,0.18819999999999998
 resnet18,momsgd,median,none,0.6171,0.0,1,0.0
 resnet18,momsgd,trimmed_mean,lie z=0.25,0.6129,0.0,1,-0.005499999999999949
 resnet18,momsgd,trimmed_mean,lie z=0.5,0.6128,0.0,1,-0.00539999999999996
 resnet18,momsgd,trimmed_mean,lie z=1.0,0.5774,0.0,1,0.030000000000000027
+resnet18,momsgd,trimmed_mean,lie z=2.0,0.5509,0.0,1,0.056500000000000106
+resnet18,momsgd,trimmed_mean,lie z=3.0,0.5505,0.0,1,0.05690000000000006
+resnet18,momsgd,trimmed_mean,minmax,0.4386,0.0,1,0.16880000000000006
 resnet18,momsgd,trimmed_mean,none,0.6074,0.0,1,0.0
